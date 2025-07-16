@@ -12,11 +12,13 @@ import {
   User, 
   Calendar,
   Users,
-  Mail
+  Mail,
+  Eye
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
 import { toast } from 'sonner'
+import Link from 'next/link'
 
 interface Student {
   id: string
@@ -44,6 +46,7 @@ interface Post {
   content: string
   created_at: string
   teacher?: Teacher
+  student?: Student
 }
 
 export default function ParentDashboard() {
@@ -150,6 +153,10 @@ export default function ParentDashboard() {
                 name,
                 email
               )
+            ),
+            students (
+              id,
+              name
             )
           `)
           .in('student_id', studentsData.map(s => s.id))
@@ -162,7 +169,8 @@ export default function ParentDashboard() {
             id: item.posts.id,
             content: item.posts.content,
             created_at: item.posts.created_at,
-            teacher: item.posts.teachers
+            teacher: item.posts.teachers,
+            student: item.students
           })) || []
         }
       }
@@ -280,14 +288,22 @@ export default function ParentDashboard() {
                 <div className="space-y-4">
                   {students.map((student) => (
                     <div key={student.id} className="border rounded-lg p-4">
-                      <div className="flex items-center space-x-3 mb-3">
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <GraduationCap className="w-5 h-5 text-blue-600" />
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center space-x-3">
+                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                            <GraduationCap className="w-5 h-5 text-blue-600" />
+                          </div>
+                          <div>
+                            <h4 className="font-medium text-gray-900">{student.name}</h4>
+                            <p className="text-sm text-gray-600">Student</p>
+                          </div>
                         </div>
-                        <div>
-                          <h4 className="font-medium text-gray-900">{student.name}</h4>
-                          <p className="text-sm text-gray-600">Student</p>
-                        </div>
+                        <Link href={`/parent/children/${student.id}`}>
+                          <Button size="sm" variant="outline">
+                            <Eye className="w-4 h-4 mr-1" />
+                            View Details
+                          </Button>
+                        </Link>
                       </div>
                       
                       {student.class ? (
@@ -350,6 +366,11 @@ export default function ParentDashboard() {
                           {post.teacher && (
                             <span className="text-sm font-medium text-blue-600">
                               {post.teacher.name}
+                            </span>
+                          )}
+                          {post.student && (
+                            <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                              {post.student.name}
                             </span>
                           )}
                         </div>
