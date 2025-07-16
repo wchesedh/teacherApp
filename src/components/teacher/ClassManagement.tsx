@@ -27,26 +27,32 @@ export default function ClassManagement() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   useEffect(() => {
-    fetchClasses()
-  }, [])
+    if (user) {
+      fetchClasses()
+    }
+  }, [user])
 
   const fetchClasses = async () => {
+    if (!user) {
+      console.error('fetchClasses called but user is not loaded')
+      return
+    }
     try {
       setLoading(true)
       const { data, error } = await supabase
         .from('classes')
         .select('*')
-        .eq('teacher_id', user?.id)
+        .eq('teacher_id', user.id)
         .order('created_at', { ascending: false })
       
       if (error) {
-        console.error('Error fetching classes:', error)
+        console.error('Error fetching classes:', error, 'user:', user)
         toast.error('Error fetching classes')
       } else {
         setClasses(data || [])
       }
     } catch (error) {
-      console.error('Error fetching classes:', error)
+      console.error('Error fetching classes (exception):', error, 'user:', user)
       toast.error('Error fetching classes')
     } finally {
       setLoading(false)

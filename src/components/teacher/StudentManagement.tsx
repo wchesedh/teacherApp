@@ -43,7 +43,19 @@ export default function StudentManagement() {
     fetchData()
   }, [])
 
+  useEffect(() => {
+    if (user) {
+      fetchData()
+    }
+  }, [user])
+
   const fetchData = async () => {
+    if (!user) {
+      console.log('User not loaded yet, skipping fetchData')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       

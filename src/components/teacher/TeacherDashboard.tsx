@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye } from 'lucide-react'
+import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2 } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
@@ -331,6 +331,49 @@ export default function TeacherDashboard() {
     }
   }
 
+  // Add this function to handle student deletion
+  const handleDeleteStudent = async (studentId: string) => {
+    if (!confirm('Are you sure you want to delete this student?')) {
+      return
+    }
+    try {
+      // Verify the student belongs to one of this teacher's classes
+      const { data: studentData, error: studentError } = await supabase
+        .from('students')
+        .select('class_id')
+        .eq('id', studentId)
+        .single()
+      if (studentError || !studentData) {
+        toast.error('Student not found')
+        return
+      }
+      const { data: classData, error: classError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('id', studentData.class_id)
+        .eq('teacher_id', user?.id)
+        .single()
+      if (classError || !classData) {
+        toast.error('You can only delete students from your own classes')
+        return
+      }
+      const { error } = await supabase
+        .from('students')
+        .delete()
+        .eq('id', studentId)
+      if (error) {
+        console.error('Error deleting student:', error)
+        toast.error('Error deleting student: ' + error.message)
+      } else {
+        await fetchData()
+        toast.success('Student deleted successfully!')
+      }
+    } catch (error) {
+      console.error('Error deleting student:', error)
+      toast.error('Error deleting student')
+    }
+  }
+
   return (
     <Layout>
       <div className="p-8">
@@ -441,15 +484,18 @@ export default function TeacherDashboard() {
                                        <div className="text-sm text-gray-400 mt-1">No parents assigned</div>
                                      )}
                                    </div>
-                                   <Link href={`/teacher/students/${student.id}`}>
-                                     <Button
-                                       size="sm"
-                                       variant="outline"
-                                     >
-                                       <Eye className="w-4 h-4 mr-1" />
-                                       View Details
+                                   <div className="flex gap-2">
+                                     <Link href={`/teacher/students/${student.id}`}>
+                                       <Button size="sm" variant="outline">
+                                         <Eye className="w-4 h-4 mr-1" />
+                                         View Details
+                                       </Button>
+                                     </Link>
+                                     <Button size="sm" variant="destructive" onClick={() => handleDeleteStudent(student.id)}>
+                                       <Trash2 className="w-4 h-4 mr-1" />
+                                       Delete
                                      </Button>
-                                   </Link>
+                                   </div>
                                  </div>
                                </div>
                              ))}
