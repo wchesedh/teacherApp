@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 interface Student {
   id: string
@@ -30,6 +31,7 @@ interface Parent {
 }
 
 export default function StudentManagement() {
+  const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [classes, setClasses] = useState<Class[]>([])
   const [parents, setParents] = useState<Parent[]>([])
@@ -248,6 +250,10 @@ export default function StudentManagement() {
     }
   }
 
+  const handleViewStudentDetails = (studentId: string) => {
+    router.push(`/admin/students/${studentId}`)
+  }
+
   const getClassName = (classId: string | null) => {
     if (!classId) return 'Not assigned'
     const classItem = classes.find(c => c.id === classId)
@@ -345,7 +351,7 @@ export default function StudentManagement() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleViewStudentDetails(student.id)}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
                           </DropdownMenuItem>

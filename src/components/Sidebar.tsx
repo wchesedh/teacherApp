@@ -76,6 +76,13 @@ export default function Sidebar({ className }: SidebarProps) {
       items: []
     },
     {
+      section: 'profile',
+      title: 'Profile',
+      icon: User,
+      href: '/teacher/profile',
+      items: []
+    },
+    {
       section: 'management',
       title: 'Management',
       icon: Settings,

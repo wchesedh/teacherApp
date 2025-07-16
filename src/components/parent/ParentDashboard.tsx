@@ -67,6 +67,12 @@ export default function ParentDashboard() {
   }, [user])
 
   const fetchParentData = async () => {
+    if (!user || !user.id) {
+      console.log('User not loaded yet, skipping fetchParentData')
+      setLoading(false)
+      return
+    }
+    
     try {
       setLoading(true)
       console.log('Fetching parent data for:', user?.email)
@@ -75,7 +81,7 @@ export default function ParentDashboard() {
       const { data: parentData, error: parentError } = await supabase
         .from('parents')
         .select('*')
-        .eq('id', user?.id)
+        .eq('id', user.id)
         .single()
 
       if (parentError) {
@@ -85,7 +91,7 @@ export default function ParentDashboard() {
       }
 
       if (!parentData) {
-        console.log('No parent record found for user ID:', user?.id)
+        console.log('No parent record found for user ID:', user.id)
         setStudents([])
         setPosts([])
         setStats({ children: 0, classes: 0, posts: 0 })

@@ -27,6 +27,7 @@ import {
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 interface Teacher {
   id: string
@@ -62,6 +63,7 @@ interface StudentParent {
 }
 
 export default function TeacherDetails({ teacherId }: { teacherId: string }) {
+  const router = useRouter()
   const [teacher, setTeacher] = useState<Teacher | null>(null)
   const [classes, setClasses] = useState<Class[]>([])
   const [students, setStudents] = useState<Student[]>([])
@@ -389,21 +391,25 @@ export default function TeacherDetails({ teacherId }: { teacherId: string }) {
           <div className="space-y-4">
             {classes.map((classItem) => (
               <Card key={classItem.id}>
-                <CardHeader>
+                <CardHeader 
+                  className="cursor-pointer hover:bg-gray-50 transition-colors"
+                  onClick={(e) => {
+                    // Don't expand if clicking on buttons
+                    if ((e.target as HTMLElement).closest('button')) {
+                      return
+                    }
+                    toggleClassExpansion(classItem.id)
+                  }}
+                >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => toggleClassExpansion(classItem.id)}
-                        className="p-1"
-                      >
+                      <div className="flex items-center justify-center w-8 h-8">
                         {expandedClasses.includes(classItem.id) ? (
                           <ChevronDown className="w-4 h-4" />
                         ) : (
                           <ChevronRight className="w-4 h-4" />
                         )}
-                      </Button>
+                      </div>
                       <BookOpen className="w-5 h-5 text-blue-600" />
                       <div>
                         <CardTitle className="text-lg">{classItem.name}</CardTitle>
@@ -484,14 +490,24 @@ export default function TeacherDetails({ teacherId }: { teacherId: string }) {
                                     </Badge>
                                   )}
                                 </div>
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleDeleteStudent(student.id)}
-                                  className="text-red-600 hover:text-red-700"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </Button>
+                                <div className="flex items-center space-x-2">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => router.push(`/admin/students/${student.id}`)}
+                                  >
+                                    <Eye className="w-4 h-4 mr-2" />
+                                    View Details
+                                  </Button>
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleDeleteStudent(student.id)}
+                                    className="text-red-600 hover:text-red-700"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </Button>
+                                </div>
                               </div>
                               
                               {/* Parents for this student */}
