@@ -26,6 +26,8 @@ interface Post {
   created_at: string;
   teacher_id: string;
   class_id: string;
+  file_url?: string;
+  file_name?: string;
   teacher?: {
     id: string;
     name: string;
@@ -101,6 +103,8 @@ export default function ClassPostsPage() {
           created_at,
           teacher_id,
           class_id,
+          file_url,
+          file_name,
           teachers (
             id,
             name,
@@ -149,7 +153,7 @@ export default function ClassPostsPage() {
     }
   };
 
-  const handleCreatePost = async (postData: { content: string }) => {
+  const handleCreatePost = async (postData: { content: string, file_url?: string, file_name?: string }) => {
     if (!user || !classId) return;
     try {
       const { data: createdPost, error: postError } = await supabase
@@ -159,6 +163,8 @@ export default function ClassPostsPage() {
             content: postData.content,
             teacher_id: user.id,
             class_id: classId,
+            file_url: postData.file_url || null,
+            file_name: postData.file_name || null,
           },
         ])
         .select();
@@ -332,6 +338,13 @@ export default function ClassPostsPage() {
                       </div>
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap">{post.content}</p>
+                    {post.file_url && (
+                      post.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                        <div className="mt-3"><img src={post.file_url} alt="Announcement attachment" className="max-w-full h-auto rounded-lg border" style={{ maxHeight: 400 }} /></div>
+                      ) : (
+                        <div className="mt-3"><a href={post.file_url} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline">{post.file_name || 'Download attachment'}</a></div>
+                      )
+                    )}
                     {post.reactions && (
                       <div className="flex items-center space-x-4 text-sm text-gray-500 mt-3">
                         {post.reactions.thumbs_up > 0 && (
@@ -421,9 +434,67 @@ export default function ClassPostsPage() {
 }
 
 // Create Post Form Component
-function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string }) => void }) {
+function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file_url?: string, file_name?: string }) => void }) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [filePreview, setFilePreview] = useState<string | null>(null);
+
+  // Handle file input change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = e.target.files?.[0];
+    if (selected) {
+      if (selected.size > 2 * 1024 * 1024) {
+        toast.error("File size must be less than 2MB");
+        return;
+      }
+      setFile(selected);
+      if (selected.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => setFilePreview(ev.target?.result as string);
+        reader.readAsDataURL(selected);
+      } else {
+        setFilePreview(null);
+      }
+    }
+  };
+
+  // Handle paste image
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+      const pastedFile = e.clipboardData.files[0];
+      if (pastedFile.type.startsWith("image/")) {
+        if (pastedFile.size > 2 * 1024 * 1024) {
+          toast.error("Image size must be less than 2MB");
+          return;
+        }
+        setFile(pastedFile);
+        const reader = new FileReader();
+        reader.onload = (ev) => setFilePreview(ev.target?.result as string);
+        reader.readAsDataURL(pastedFile);
+        e.preventDefault();
+      }
+    }
+  };
+
+  // Upload file to Supabase Storage
+  const uploadFile = async (file: File): Promise<{ url: string, name: string } | null> => {
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const filePath = fileName;
+      const { error } = await supabase.storage.from('class-announcements').upload(filePath, file);
+      if (error) {
+        toast.error('Error uploading file: ' + (error.message || error.error_description || JSON.stringify(error)));
+        return null;
+      }
+      const { data } = supabase.storage.from('class-announcements').getPublicUrl(filePath);
+      return { url: data.publicUrl, name: file.name };
+    } catch (err: any) {
+      toast.error('Error uploading file: ' + (err.message || JSON.stringify(err)));
+      return null;
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -432,8 +503,20 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string }) =>
       return;
     }
     setLoading(true);
-    await onSubmit({ content });
+    let file_url, file_name;
+    if (file) {
+      const uploaded = await uploadFile(file);
+      if (!uploaded) {
+        setLoading(false);
+        return;
+      }
+      file_url = uploaded.url;
+      file_name = uploaded.name;
+    }
+    await onSubmit({ content, file_url, file_name });
     setContent("");
+    setFile(null);
+    setFilePreview(null);
     setLoading(false);
   };
 
@@ -445,11 +528,32 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string }) =>
           id="content"
           value={content}
           onChange={(e) => setContent(e.target.value)}
+          onPaste={handlePaste}
           placeholder="Share important information with all parents in this class..."
           rows={6}
           required
           className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
         />
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="file">Attach File or Image (max 2MB)</Label>
+        <input
+          id="file"
+          type="file"
+          accept="*"
+          onChange={handleFileChange}
+          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+        />
+        {file && (
+          <div className="mt-2">
+            {filePreview ? (
+              <img src={filePreview} alt="Preview" className="max-h-40 rounded border" />
+            ) : (
+              <span className="text-sm text-gray-700">{file.name}</span>
+            )}
+            <Button type="button" variant="ghost" size="sm" className="ml-2" onClick={() => { setFile(null); setFilePreview(null); }}>Remove</Button>
+          </div>
+        )}
       </div>
       <div className="flex justify-end space-x-2">
         <Button type="submit" disabled={loading}>
