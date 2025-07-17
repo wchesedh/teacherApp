@@ -203,11 +203,14 @@ export default function ClassPostsPage() {
         toast.error('Error fetching reactors');
         setReactors([]);
       } else {
-        setReactors((data || []).map(r => ({
-          id: r.parent_id,
-          name: r.parents?.name || 'Unknown',
-          email: r.parents?.email || ''
-        })));
+        setReactors((data || []).map((r: any) => {
+          const parent = Array.isArray(r.parents) ? r.parents[0] : r.parents;
+          return {
+            id: r.parent_id,
+            name: parent?.name || 'Unknown',
+            email: parent?.email || ''
+          };
+        }));
       }
     } catch (e) {
       toast.error('Error fetching reactors');
@@ -485,7 +488,7 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file
       const filePath = fileName;
       const { error } = await supabase.storage.from('class-announcements').upload(filePath, file);
       if (error) {
-        toast.error('Error uploading file: ' + (error.message || error.error_description || JSON.stringify(error)));
+        toast.error('Error uploading file: ' + (error.message || JSON.stringify(error)));
         return null;
       }
       const { data } = supabase.storage.from('class-announcements').getPublicUrl(filePath);
