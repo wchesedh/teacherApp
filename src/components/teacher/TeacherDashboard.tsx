@@ -610,13 +610,22 @@ export default function TeacherDashboard() {
         {classAnnouncements.length > 0 && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5" />
-                <span>Recent Class Announcements</span>
-              </CardTitle>
-              <CardDescription>
-                Your recent class-wide announcements and parent reactions
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center space-x-2">
+                    <MessageSquare className="w-5 h-5" />
+                    <span>Recent Class Announcements</span>
+                  </CardTitle>
+                  <CardDescription>
+                    Your recent class-wide announcements and parent reactions
+                  </CardDescription>
+                </div>
+                <Link href="/teacher/announcements">
+                  <Button variant="outline" size="sm">
+                    View All Announcements
+                  </Button>
+                </Link>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
@@ -729,15 +738,6 @@ export default function TeacherDashboard() {
                     </div>
                   </div>
                 ))}
-                {classAnnouncements.length > 3 && (
-                  <div className="text-center pt-4">
-                    <Link href="/teacher/announcements">
-                      <Button variant="outline" size="sm">
-                        View All Announcements
-                      </Button>
-                    </Link>
-                  </div>
-                )}
               </div>
             </CardContent>
           </Card>

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { 
   GraduationCap, 
   User, 
@@ -18,7 +19,10 @@ import {
   ThumbsUp,
   Heart,
   Star,
-  Smile
+  Smile,
+  MoreVertical,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -76,6 +80,11 @@ export default function StudentProfilePage() {
   const [reactorsLoading, setReactorsLoading] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState<string | null>(null);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const [editLoading, setEditLoading] = useState(false);
+  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (studentId) {
@@ -294,6 +303,85 @@ export default function StudentProfilePage() {
     }
   };
 
+  const handleEdit = (post: Post) => {
+    setEditingPost(post);
+    setEditContent(post.content);
+    setShowEditDialog(true);
+  };
+
+  const handleDelete = async (postId: string) => {
+    if (!confirm('Are you sure you want to delete this post? This action cannot be undone.')) {
+      return;
+    }
+
+    // Mark as deleting for visual feedback
+    setDeletingIds(prev => new Set(prev).add(postId));
+
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId);
+
+      if (error) {
+        console.error('Error deleting post:', error);
+        toast.error('Error deleting post: ' + error.message);
+        // Remove from deleting state
+        setDeletingIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(postId);
+          return newSet;
+        });
+        return;
+      }
+
+      // Optimistic update - remove from UI with animation
+      setPosts(prev => prev.filter(post => post.id !== postId));
+      toast.success('Post deleted successfully!');
+    } catch (error) {
+      console.error('Error deleting post:', error);
+      toast.error('Error deleting post');
+      // Remove from deleting state
+      setDeletingIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(postId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingPost || !editContent.trim()) {
+      toast.error('Please enter post content');
+      return;
+    }
+
+    setEditLoading(true);
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({ content: editContent.trim() })
+        .eq('id', editingPost.id);
+
+      if (error) {
+        console.error('Error updating post:', error);
+        toast.error('Error updating post: ' + error.message);
+        return;
+      }
+
+      toast.success('Post updated successfully!');
+      setShowEditDialog(false);
+      setEditingPost(null);
+      setEditContent('');
+      fetchStudentDetails(); // Refresh the posts
+    } catch (error) {
+      console.error('Error updating post:', error);
+      toast.error('Error updating post');
+    } finally {
+      setEditLoading(false);
+    }
+  };
+
   if (loading) {
     return (
       <Layout>
@@ -451,11 +539,47 @@ export default function StudentProfilePage() {
                 ) : (
                   <div className="space-y-4">
                     {posts.map((post) => (
-                      <div key={post.id} className="border rounded-lg p-4">
+                      <div 
+                        key={post.id} 
+                        className={`border rounded-lg p-4 transition-all duration-300 ease-in-out ${
+                          deletingIds.has(post.id) 
+                            ? 'opacity-50 scale-95 bg-gray-50' 
+                            : 'opacity-100 scale-100'
+                        }`}
+                      >
                         <div className="flex items-start justify-between mb-2">
                           <span className="text-sm text-gray-500">
                             {new Date(post.created_at).toLocaleDateString()}
                           </span>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className="h-8 w-8 p-0"
+                                disabled={deletingIds.has(post.id)}
+                              >
+                                <MoreVertical className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem 
+                                onClick={() => handleEdit(post)}
+                                disabled={deletingIds.has(post.id)}
+                              >
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDelete(post.id)}
+                                className="text-red-600 focus:text-red-600"
+                                disabled={deletingIds.has(post.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                         <p className="text-gray-600 whitespace-pre-wrap mb-3">{post.content}</p>
                         {post.image_url && (
@@ -569,6 +693,48 @@ export default function StudentProfilePage() {
                 ))}
               </ul>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Edit Post Dialog */}
+        <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Edit Post</DialogTitle>
+              <DialogDescription>
+                Update the content of your post about {student?.name}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div>
+                <label className="text-sm font-medium">Content</label>
+                <textarea
+                  value={editContent}
+                  onChange={(e) => setEditContent(e.target.value)}
+                  placeholder="Enter post content..."
+                  rows={6}
+                  className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                />
+              </div>
+              <div className="flex justify-end space-x-2">
+                <Button 
+                  variant="outline" 
+                  onClick={() => {
+                    setShowEditDialog(false);
+                    setEditingPost(null);
+                    setEditContent('');
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  onClick={handleSaveEdit}
+                  disabled={editLoading || !editContent.trim()}
+                >
+                  {editLoading ? 'Saving...' : 'Save Changes'}
+                </Button>
+              </div>
+            </div>
           </DialogContent>
         </Dialog>
       </div>
