@@ -31,6 +31,12 @@ interface Post {
     name: string;
     email: string;
   };
+  reactions?: {
+    thumbs_up: number;
+    heart: number;
+    clap: number;
+    smile: number;
+  };
 }
 
 export default function ClassPostsPage() {
@@ -43,6 +49,11 @@ export default function ClassPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [showReactorsDialog, setShowReactorsDialog] = useState(false);
+  const [reactors, setReactors] = useState<Array<{ id: string; name: string; email: string }>>([]);
+  const [reactorsLoading, setReactorsLoading] = useState(false);
+  const [selectedReaction, setSelectedReaction] = useState<string | null>(null);
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
   useEffect(() => {
     if (user && classId) {
@@ -105,11 +116,27 @@ export default function ClassPostsPage() {
         return;
       }
       if (postsData) {
-        const postsWithTeachers = postsData.map((post: any) => ({
-          ...post,
-          teacher: post.teachers,
+        // For each post, fetch reactions
+        const postsWithReactions = await Promise.all(postsData.map(async (post: any) => {
+          const { data: reactionCounts, error: reactionCountsError } = await supabase
+            .from('post_reactions')
+            .select('reaction_type')
+            .eq('post_id', post.id);
+          const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 };
+          if (!reactionCountsError && reactionCounts) {
+            reactionCounts.forEach((reaction: any) => {
+              if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                reactions[reaction.reaction_type as keyof typeof reactions]++;
+              }
+            });
+          }
+          return {
+            ...post,
+            teacher: post.teachers,
+            reactions,
+          };
         }));
-        setPosts(postsWithTeachers);
+        setPosts(postsWithReactions);
       } else {
         setPosts([]);
       }
@@ -150,6 +177,53 @@ export default function ClassPostsPage() {
     } catch (error) {
       console.error("Error creating post:", error);
       toast.error("Error creating post");
+    }
+  };
+
+  // Fetch reactors for a post and reaction type
+  const fetchReactors = async (postId: string, reactionType: string) => {
+    setReactorsLoading(true);
+    setReactors([]);
+    setSelectedReaction(reactionType);
+    setShowReactorsDialog(true);
+    setSelectedPost(posts.find(p => p.id === postId) || null);
+    try {
+      const { data, error } = await supabase
+        .from('post_reactions')
+        .select('parent_id, parents(name, email)')
+        .eq('post_id', postId)
+        .eq('reaction_type', reactionType);
+      if (error) {
+        toast.error('Error fetching reactors');
+        setReactors([]);
+      } else {
+        setReactors((data || []).map(r => ({
+          id: r.parent_id,
+          name: r.parents?.name || 'Unknown',
+          email: r.parents?.email || ''
+        })));
+      }
+    } catch (e) {
+      toast.error('Error fetching reactors');
+      setReactors([]);
+    } finally {
+      setReactorsLoading(false);
+    }
+  };
+
+  // Helper for icons
+  const getReactionIcon = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return <span title="Thumbs Up" role="img">👍</span>;
+      case 'heart':
+        return <span title="Heart" role="img">❤️</span>;
+      case 'clap':
+        return <span title="Clap" role="img">👏</span>;
+      case 'smile':
+        return <span title="Smile" role="img">😊</span>;
+      default:
+        return <span>👍</span>;
     }
   };
 
@@ -258,6 +332,54 @@ export default function ClassPostsPage() {
                       </div>
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap">{post.content}</p>
+                    {post.reactions && (
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 mt-3">
+                        {post.reactions.thumbs_up > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={() => fetchReactors(post.id, 'thumbs_up')}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('thumbs_up')}
+                            <span>{post.reactions.thumbs_up}</span>
+                          </button>
+                        )}
+                        {post.reactions.heart > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={() => fetchReactors(post.id, 'heart')}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('heart')}
+                            <span>{post.reactions.heart}</span>
+                          </button>
+                        )}
+                        {post.reactions.clap > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={() => fetchReactors(post.id, 'clap')}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('clap')}
+                            <span>{post.reactions.clap}</span>
+                          </button>
+                        )}
+                        {post.reactions.smile > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={() => fetchReactors(post.id, 'smile')}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('smile')}
+                            <span>{post.reactions.smile}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -265,6 +387,35 @@ export default function ClassPostsPage() {
           </CardContent>
         </Card>
       </div>
+      <Dialog open={showReactorsDialog} onOpenChange={setShowReactorsDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {selectedReaction && selectedPost ? (
+                <span>
+                  Reactors for <span className="font-semibold">{selectedReaction.replace('_', ' ')}</span> on announcement:<br />
+                  <span className="text-xs text-gray-500">{selectedPost.content.slice(0, 60)}{selectedPost.content.length > 60 ? '...' : ''}</span>
+                </span>
+              ) : 'Reactors'}
+            </DialogTitle>
+          </DialogHeader>
+          {reactorsLoading ? (
+            <div className="py-4 text-center">Loading...</div>
+          ) : reactors.length === 0 ? (
+            <div className="py-4 text-center text-gray-500">No parents have reacted with this emoji yet.</div>
+          ) : (
+            <ul className="space-y-2 py-2">
+              {reactors.map((parent) => (
+                <li key={parent.id} className="flex items-center space-x-3">
+                  <User className="w-4 h-4 text-blue-600" />
+                  <span className="font-medium">{parent.name}</span>
+                  {parent.email && <span className="text-gray-500 text-xs">({parent.email})</span>}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
     </Layout>
   );
 }

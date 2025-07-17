@@ -51,6 +51,14 @@ interface Post {
   created_at: string
   teacher?: Teacher
   student?: Student
+  image_url?: string
+  reactions?: {
+    thumbs_up: number
+    heart: number
+    clap: number
+    smile: number
+  }
+  userReactions?: string[]
 }
 
 interface ClassAnnouncement {
@@ -59,6 +67,7 @@ interface ClassAnnouncement {
   created_at: string
   teacher?: Teacher
   class?: Class
+  image_url?: string
   reactions?: {
     thumbs_up: number
     heart: number
@@ -178,7 +187,8 @@ export default function ParentDashboard() {
                 id,
                 name,
                 email
-              )
+              ),
+              image_url
             ),
             students (
               id,
@@ -196,9 +206,45 @@ export default function ParentDashboard() {
             content: item.posts.content,
             created_at: item.posts.created_at,
             teacher: item.posts.teachers,
-            student: item.students
+            student: item.students,
+            image_url: item.posts.image_url
           })) || []
         }
+      }
+
+      // 2. In fetchParentData, after transforming allPosts, fetch reactions for each post
+      if (allPosts.length > 0) {
+        allPosts = await Promise.all(
+          allPosts.map(async (post) => {
+            // Get reaction counts for this post
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+            // Get user's reactions for this post
+            const { data: userReactions, error: userReactionsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+              .eq('parent_id', user.id)
+            // Calculate reaction counts
+            const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+            // Get user's reactions
+            const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+            return {
+              ...post,
+              reactions,
+              userReactions: userReactionTypes
+            }
+          })
+        )
       }
 
       setPosts(allPosts)
@@ -221,7 +267,8 @@ export default function ParentDashboard() {
             classes (
               id,
               name
-            )
+            ),
+            image_url
           `)
           .in('class_id', classIds)
           .not('class_id', 'is', null)
@@ -270,6 +317,7 @@ export default function ParentDashboard() {
                 created_at: item.created_at,
                 teacher: item.teachers,
                 class: item.classes,
+                image_url: item.image_url,
                 reactions,
                 userReactions: userReactionTypes
               }
@@ -296,78 +344,103 @@ export default function ParentDashboard() {
     }
   }
 
-  const handleReaction = async (announcementId: string, reactionType: string) => {
+  // 3. Update handleReaction to work for both class announcements and posts
+  const handleReaction = async (postId: string, reactionType: string, isAnnouncement = false) => {
     if (!user) return
-
-    // Find the announcement in state
-    const announcementIndex = classAnnouncements.findIndex(a => a.id === announcementId)
-    if (announcementIndex === -1) return
-
-    const announcement = classAnnouncements[announcementIndex]
-    const userHasReaction = announcement.userReactions?.includes(reactionType) || false
-
-    // Optimistic update - update UI immediately
-    const updatedAnnouncements = [...classAnnouncements]
-    const updatedAnnouncement = { ...announcement }
-    
-    if (!updatedAnnouncement.reactions) updatedAnnouncement.reactions = { thumbs_up: 0, heart: 0, clap:0, smile: 0 }
-    if (!updatedAnnouncement.userReactions) updatedAnnouncement.userReactions = []
-
-    if (userHasReaction) {
-      // Remove reaction
-      updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]--
-      updatedAnnouncement.userReactions = updatedAnnouncement.userReactions.filter(r => r !== reactionType)
-    } else {
-      // Add reaction
-      updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]++
-      updatedAnnouncement.userReactions = [...updatedAnnouncement.userReactions, reactionType]
-    }
-
-    updatedAnnouncements[announcementIndex] = updatedAnnouncement
-    setClassAnnouncements(updatedAnnouncements)
-
-    try {
+    if (isAnnouncement) {
+      // Find the announcement in state
+      const announcementIndex = classAnnouncements.findIndex(a => a.id === postId)
+      if (announcementIndex === -1) return
+      const announcement = classAnnouncements[announcementIndex]
+      const userHasReaction = announcement.userReactions?.includes(reactionType) || false
+      // Optimistic update - update UI immediately
+      const updatedAnnouncements = [...classAnnouncements]
+      const updatedAnnouncement = { ...announcement }
+      if (!updatedAnnouncement.reactions) updatedAnnouncement.reactions = { thumbs_up: 0, heart: 0, clap:0, smile: 0 }
+      if (!updatedAnnouncement.userReactions) updatedAnnouncement.userReactions = []
       if (userHasReaction) {
-        // Remove reaction from database
-        const { error: deleteError } = await supabase
-          .from('post_reactions')
-          .delete()
-          .eq('post_id', announcementId)
-          .eq('parent_id', user.id)
-          .eq('reaction_type', reactionType)
-
-        if (deleteError) {
-          console.error('Error removing reaction:', deleteError)
-          toast.error('Error removing reaction')
-          // Revert optimistic update
-          setClassAnnouncements(classAnnouncements)
-          return
-        }
+        updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]--
+        updatedAnnouncement.userReactions = updatedAnnouncement.userReactions.filter(r => r !== reactionType)
       } else {
-        // Add reaction to database
-        const { error: insertError } = await supabase
-          .from('post_reactions')
-          .insert([{
-            post_id: announcementId,
-            parent_id: user.id,
-            reaction_type: reactionType
-          }])
-
-        if (insertError) {
-          console.error('Error adding reaction:', insertError)
-          toast.error('Error adding reaction')
-          // Revert optimistic update
-          setClassAnnouncements(classAnnouncements)
-          return
-        }
+        updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]++
+        updatedAnnouncement.userReactions = [...updatedAnnouncement.userReactions, reactionType]
       }
-
-      // Success - no need to revert, UI is already updated
-    } catch (error) {
-      console.error('Error handling reaction:', error)
-      toast.error('Error updating reaction')
-      // Revert optimistic update
-      setClassAnnouncements(classAnnouncements)
+      updatedAnnouncements[announcementIndex] = updatedAnnouncement
+      setClassAnnouncements(updatedAnnouncements)
+      try {
+        if (userHasReaction) {
+          const { error: deleteError } = await supabase
+            .from('post_reactions')
+            .delete()
+            .eq('post_id', postId)
+            .eq('parent_id', user.id)
+            .eq('reaction_type', reactionType)
+          if (deleteError) {
+            toast.error('Error removing reaction')
+            setClassAnnouncements(classAnnouncements)
+            return
+          }
+        } else {
+          const { error: insertError } = await supabase
+            .from('post_reactions')
+            .insert([{ post_id: postId, parent_id: user.id, reaction_type: reactionType }])
+          if (insertError) {
+            toast.error('Error adding reaction')
+            setClassAnnouncements(classAnnouncements)
+            return
+          }
+        }
+      } catch (error) {
+        toast.error('Error updating reaction')
+        setClassAnnouncements(classAnnouncements)
+      }
+    } else {
+      // Find the post in state
+      const postIndex = posts.findIndex(p => p.id === postId)
+      if (postIndex === -1) return
+      const post = posts[postIndex]
+      const userHasReaction = post.userReactions?.includes(reactionType) || false
+      // Optimistic update
+      const updatedPosts = [...posts]
+      const updatedPost = { ...post }
+      if (!updatedPost.reactions) updatedPost.reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
+      if (!updatedPost.userReactions) updatedPost.userReactions = []
+      if (userHasReaction) {
+        updatedPost.reactions[reactionType as keyof typeof updatedPost.reactions]--
+        updatedPost.userReactions = updatedPost.userReactions.filter(r => r !== reactionType)
+      } else {
+        updatedPost.reactions[reactionType as keyof typeof updatedPost.reactions]++
+        updatedPost.userReactions = [...updatedPost.userReactions, reactionType]
+      }
+      updatedPosts[postIndex] = updatedPost
+      setPosts(updatedPosts)
+      try {
+        if (userHasReaction) {
+          const { error: deleteError } = await supabase
+            .from('post_reactions')
+            .delete()
+            .eq('post_id', postId)
+            .eq('parent_id', user.id)
+            .eq('reaction_type', reactionType)
+          if (deleteError) {
+            toast.error('Error removing reaction')
+            setPosts(posts)
+            return
+          }
+        } else {
+          const { error: insertError } = await supabase
+            .from('post_reactions')
+            .insert([{ post_id: postId, parent_id: user.id, reaction_type: reactionType }])
+          if (insertError) {
+            toast.error('Error adding reaction')
+            setPosts(posts)
+            return
+          }
+        }
+      } catch (error) {
+        toast.error('Error updating reaction')
+        setPosts(posts)
+      }
     }
   }
 
@@ -512,43 +585,53 @@ export default function ParentDashboard() {
                         {new Date(announcement.created_at).toLocaleDateString()}
                       </span>
                     </div>
-                    <p className="text-gray-600 whitespace-pre-wrap text-sm">{announcement.content}</p>
+                    <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
+                    {announcement.image_url && (
+                      <div className="mt-3">
+                        <img 
+                          src={announcement.image_url} 
+                          alt="Post image"
+                          className="max-w-full h-auto rounded-lg border"
+                          style={{ maxHeight: 400 }}
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center mt-4 space-x-2">
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleReaction(announcement.id, 'thumbs_up')}
+                        onClick={() => handleReaction(announcement.id, 'thumbs_up', true)}
                         className={`${getReactionColor('thumbs_up')} ${announcement.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''}`}
                       >
                         <ThumbsUp className="w-4 h-4" />
-                        {announcement.reactions?.thumbs_up}
+                        {announcement.reactions?.thumbs_up || 0}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleReaction(announcement.id, 'heart')}
+                        onClick={() => handleReaction(announcement.id, 'heart', true)}
                         className={`${getReactionColor('heart')} ${announcement.userReactions?.includes('heart') ? 'text-red-600' : ''}`}
                       >
                         <Heart className="w-4 h-4" />
-                        {announcement.reactions?.heart}
+                        {announcement.reactions?.heart || 0}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleReaction(announcement.id, 'clap')}
+                        onClick={() => handleReaction(announcement.id, 'clap', true)}
                         className={`${getReactionColor('clap')} ${announcement.userReactions?.includes('clap') ? 'text-yellow-600' : ''}`}
                       >
                         <Star className="w-4 h-4" />
-                        {announcement.reactions?.clap}
+                        {announcement.reactions?.clap || 0}
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleReaction(announcement.id, 'smile')}
+                        onClick={() => handleReaction(announcement.id, 'smile', true)}
                         className={`${getReactionColor('smile')} ${announcement.userReactions?.includes('smile') ? 'text-green-600' : ''}`}
                       >
                         <Smile className="w-4 h-4" />
-                        {announcement.reactions?.smile}
+                        {announcement.reactions?.smile || 0}
                       </Button>
                     </div>
                   </div>
@@ -680,7 +763,55 @@ export default function ParentDashboard() {
                           {new Date(post.created_at).toLocaleDateString()}
                         </span>
                       </div>
-                      <p className="text-gray-600 whitespace-pre-wrap text-sm">{post.content}</p>
+                      <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{post.content}</p>
+                      {post.image_url && (
+                        <div className="mt-3">
+                          <img 
+                            src={post.image_url} 
+                            alt="Post image"
+                            className="max-w-full h-auto rounded-lg border"
+                            style={{ maxHeight: 400 }}
+                          />
+                        </div>
+                      )}
+                      <div className="flex items-center mt-2 space-x-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReaction(post.id, 'thumbs_up', false)}
+                          className={`${getReactionColor('thumbs_up')} ${post.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''}`}
+                        >
+                          <ThumbsUp className="w-4 h-4" />
+                          {post.reactions?.thumbs_up || 0}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReaction(post.id, 'heart', false)}
+                          className={`${getReactionColor('heart')} ${post.userReactions?.includes('heart') ? 'text-red-600' : ''}`}
+                        >
+                          <Heart className="w-4 h-4" />
+                          {post.reactions?.heart || 0}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReaction(post.id, 'clap', false)}
+                          className={`${getReactionColor('clap')} ${post.userReactions?.includes('clap') ? 'text-yellow-600' : ''}`}
+                        >
+                          <Star className="w-4 h-4" />
+                          {post.reactions?.clap || 0}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleReaction(post.id, 'smile', false)}
+                          className={`${getReactionColor('smile')} ${post.userReactions?.includes('smile') ? 'text-green-600' : ''}`}
+                        >
+                          <Smile className="w-4 h-4" />
+                          {post.reactions?.smile || 0}
+                        </Button>
+                      </div>
                     </div>
                   ))}
                   {posts.length > 5 && (
