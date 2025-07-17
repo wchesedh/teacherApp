@@ -1,3 +1,15 @@
+# TrackWise
+
+TrackWise is a comprehensive student progress tracking and communication platform that connects teachers, parents, and administrators for better educational outcomes.
+
+## Features
+
+- **Multi-role Support**: Teachers, parents, and administrators
+- **Student Progress Tracking**: Real-time updates on student performance
+- **Communication Hub**: Direct messaging and updates between teachers and parents
+- **Class Management**: Comprehensive class and student management tools
+- **Progress Updates**: Detailed tracking of student achievements and areas for improvement
+
 This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
 
 ## Getting Started

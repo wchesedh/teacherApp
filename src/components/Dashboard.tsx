@@ -29,8 +29,8 @@ export default function Dashboard() {
     switch (user?.role) {
       default:
         return {
-          title: 'Dashboard',
-          description: 'Welcome to the teacher-parent communication app',
+                  title: 'Dashboard',
+        description: 'Welcome to TrackWise - Smart student progress tracking',
           features: []
         }
     }

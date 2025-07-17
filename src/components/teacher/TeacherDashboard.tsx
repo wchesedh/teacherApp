@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2 } from 'lucide-react'
+import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
@@ -53,6 +53,27 @@ interface Parent {
   created_at: string
 }
 
+interface ClassAnnouncement {
+  id: string
+  content: string
+  created_at: string
+  teacher?: Teacher
+  class?: Class
+  reactions?: {
+    thumbs_up: number
+    heart: number
+    clap: number
+    smile: number
+  }
+  userReactions?: string[]
+}
+
+interface Teacher {
+  id: string
+  name: string
+  email: string
+}
+
 export default function TeacherDashboard() {
   const { user } = useAuth()
   const [stats, setStats] = useState<Stats>({
@@ -62,6 +83,7 @@ export default function TeacherDashboard() {
     posts: 0
   })
   const [classes, setClasses] = useState<Class[]>([])
+  const [classAnnouncements, setClassAnnouncements] = useState<ClassAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
   const [expandedClasses, setExpandedClasses] = useState<string[]>([])
   const [isAddClassOpen, setIsAddClassOpen] = useState(false)
@@ -69,6 +91,11 @@ export default function TeacherDashboard() {
   const [selectedClassForStudent, setSelectedClassForStudent] = useState<string>('')
   const [showCredentials, setShowCredentials] = useState(false)
   const [parentCredentials, setParentCredentials] = useState<{ email: string; password: string } | null>(null)
+  const [showReactorsDialog, setShowReactorsDialog] = useState(false);
+  const [reactors, setReactors] = useState<Parent[]>([]);
+  const [reactorsLoading, setReactorsLoading] = useState(false);
+  const [selectedReaction, setSelectedReaction] = useState<string | null>(null);
+  const [selectedAnnouncement, setSelectedAnnouncement] = useState<ClassAnnouncement | null>(null);
 
   useEffect(() => {
     fetchData()
@@ -133,6 +160,9 @@ export default function TeacherDashboard() {
 
       // Fetch classes with students and parents
       await fetchClassesWithDetails()
+
+      // Fetch class announcements with reactions
+      await fetchClassAnnouncements()
 
       // Log any errors for debugging
       if (classesError) console.error('Error fetching classes:', classesError)
@@ -215,6 +245,128 @@ export default function TeacherDashboard() {
       setClasses(classesWithDetails)
     } catch (error) {
       console.error('Error fetching classes with details:', error)
+    }
+  }
+
+  const fetchClassAnnouncements = async () => {
+    try {
+      // Get teacher's class IDs
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', user?.id)
+
+      if (classesError) {
+        console.error('Error fetching teacher classes:', classesError)
+        return
+      }
+
+      const classIds = classesData?.map(c => c.id) || []
+      
+      if (classIds.length === 0) {
+        setClassAnnouncements([])
+        return
+      }
+
+      // Fetch class announcements (posts with class_id)
+      const { data: announcementsData, error: announcementsError } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          created_at,
+          class_id,
+          teachers (
+            id,
+            name,
+            email
+          ),
+          classes (
+            id,
+            name
+          )
+        `)
+        .in('class_id', classIds)
+        .not('class_id', 'is', null)
+        .order('created_at', { ascending: false })
+
+      if (announcementsError) {
+        console.error('Error fetching class announcements:', announcementsError)
+        setClassAnnouncements([])
+        return
+      }
+
+      // Transform announcements data and fetch reactions
+      const announcementsWithReactions = await Promise.all(
+        (announcementsData || []).map(async (item: any) => {
+          // Get reaction counts for this announcement
+          const { data: reactionCounts, error: reactionCountsError } = await supabase
+            .from('post_reactions')
+            .select('reaction_type')
+            .eq('post_id', item.id)
+
+          // Calculate reaction counts
+          const reactions = {
+            thumbs_up: 0,
+            heart: 0,
+            clap: 0,
+            smile: 0
+          }
+
+          if (!reactionCountsError && reactionCounts) {
+            reactionCounts.forEach((reaction: any) => {
+              if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                reactions[reaction.reaction_type as keyof typeof reactions]++
+              }
+            })
+          }
+
+          return {
+            id: item.id,
+            content: item.content,
+            created_at: item.created_at,
+            teacher: item.teachers,
+            class: item.classes,
+            reactions,
+            userReactions: []  // Teachers don't react to their own posts
+          }
+        })
+      )
+
+      setClassAnnouncements(announcementsWithReactions)
+    } catch (error) {
+      console.error('Error fetching class announcements:', error)
+      setClassAnnouncements([])
+    }
+  }
+
+  const getReactionIcon = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return <ThumbsUp className="w-4 h-4" />
+      case 'heart':
+        return <Heart className="w-4 h-4" />
+      case 'clap':
+        return <Star className="w-4 h-4" />
+      case 'smile':
+        return <Smile className="w-4 h-4" />
+      default:
+        return <ThumbsUp className="w-4 h-4" />
+    }
+  }
+
+  const getReactionColor = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return 'text-blue-600 hover:text-blue-700'
+      case 'heart':
+        return 'text-red-600 hover:text-red-700'
+      case 'clap':
+        return 'text-yellow-600 hover:text-yellow-700'
+      case 'smile':
+        return 'text-green-600 hover:text-green-700'
+      default:
+        return 'text-gray-600 hover:text-gray-700'
     }
   }
 
@@ -374,6 +526,37 @@ export default function TeacherDashboard() {
     }
   }
 
+  // Add this function to fetch reactors for a post and reaction type
+  const fetchReactors = async (announcementId: string, reactionType: string) => {
+    setReactorsLoading(true);
+    setReactors([]);
+    setSelectedReaction(reactionType);
+    setShowReactorsDialog(true);
+    setSelectedAnnouncement(classAnnouncements.find(a => a.id === announcementId) || null);
+    try {
+      const { data, error } = await supabase
+        .from('post_reactions')
+        .select('parent_id, parents(name, email)')
+        .eq('post_id', announcementId)
+        .eq('reaction_type', reactionType);
+      if (error) {
+        toast.error('Error fetching reactors');
+        setReactors([]);
+      } else {
+        setReactors((data || []).map(r => ({
+          id: r.parent_id,
+          name: r.parents?.name || 'Unknown',
+          email: r.parents?.email || ''
+        })));
+      }
+    } catch (e) {
+      toast.error('Error fetching reactors');
+      setReactors([]);
+    } finally {
+      setReactorsLoading(false);
+    }
+  };
+
   return (
     <Layout>
       <div className="p-8">
@@ -408,6 +591,104 @@ export default function TeacherDashboard() {
             </Card>
           ))}
         </div>
+
+        {/* Class Announcements Section */}
+        {classAnnouncements.length > 0 && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center space-x-2">
+                <MessageSquare className="w-5 h-5" />
+                <span>Recent Class Announcements</span>
+              </CardTitle>
+              <CardDescription>
+                Your recent class-wide announcements and parent reactions
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {classAnnouncements.slice(0, 3).map((announcement) => (
+                  <div key={announcement.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        {announcement.class && (
+                          <span className="text-sm text-purple-600 bg-purple-100 px-2">{announcement.class.name}</span>
+                        )}
+                        <span className="text-sm text-gray-500">
+                          {new Date(announcement.created_at).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
+                    
+                    {/* Reaction counts (read-only for teachers) */}
+                    <div className="flex items-center space-x-4 text-sm text-gray-500">
+                      {announcement.reactions && (
+                        <>
+                          {announcement.reactions.thumbs_up > 0 && (
+                            <button
+                              type="button"
+                              className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                              onClick={() => fetchReactors(announcement.id, 'thumbs_up')}
+                              title="See who reacted"
+                            >
+                              <ThumbsUp className="w-4 h-4 text-blue-600" />
+                              <span>{announcement.reactions.thumbs_up}</span>
+                            </button>
+                          )}
+                          {announcement.reactions.heart > 0 && (
+                            <button
+                              type="button"
+                              className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                              onClick={() => fetchReactors(announcement.id, 'heart')}
+                              title="See who reacted"
+                            >
+                              <Heart className="w-4 h-4 text-red-600" />
+                              <span>{announcement.reactions.heart}</span>
+                            </button>
+                          )}
+                          {announcement.reactions.clap > 0 && (
+                            <button
+                              type="button"
+                              className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                              onClick={() => fetchReactors(announcement.id, 'clap')}
+                              title="See who reacted"
+                            >
+                              <Star className="w-4 h-4 text-yellow-600" />
+                              <span>{announcement.reactions.clap}</span>
+                            </button>
+                          )}
+                          {announcement.reactions.smile > 0 && (
+                            <button
+                              type="button"
+                              className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                              onClick={() => fetchReactors(announcement.id, 'smile')}
+                              title="See who reacted"
+                            >
+                              <Smile className="w-4 h-4 text-green-600" />
+                              <span>{announcement.reactions.smile}</span>
+                            </button>
+                          )}
+                        </>
+                      )}
+                      {(!announcement.reactions || 
+                        (announcement.reactions.thumbs_up === 0 && 
+                         announcement.reactions.heart === 0 && 
+                         announcement.reactions.clap === 0 && 
+                         announcement.reactions.smile === 0)) && null}
+                    </div>
+                  </div>
+                ))}
+                {classAnnouncements.length > 3 && (
+                  <div className="text-center pt-4">
+                    <Button variant="outline" size="sm">
+                      View All Announcements
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Classes Management */}
         <Card>
@@ -453,18 +734,25 @@ export default function TeacherDashboard() {
                           </p>
                         </div>
                       </div>
-                      <Button 
-                        size="sm" 
-                        variant="outline"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedClassForStudent(classItem.id)
-                          setIsAddStudentOpen(true)
-                        }}
-                      >
-                        <Plus className="mr-2 h-3 w-3" />
-                        Add Student
-                      </Button>
+                      <div className="flex items-center gap-2">
+                        <Link href={`/teacher/classes/${classItem.id}/posts`}>
+                          <Button size="sm" variant="outline">
+                            Announcements
+                          </Button>
+                        </Link>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedClassForStudent(classItem.id)
+                            setIsAddStudentOpen(true)
+                          }}
+                        >
+                          <Plus className="mr-2 h-3 w-3" />
+                          Add Student
+                        </Button>
+                      </div>
                     </div>
                     
                     {expandedClasses.includes(classItem.id) && (
@@ -580,6 +868,37 @@ export default function TeacherDashboard() {
                   Close
                 </Button>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Reactors Dialog */}
+        <Dialog open={showReactorsDialog} onOpenChange={setShowReactorsDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {selectedReaction && selectedAnnouncement ? (
+                  <span>
+                    Reactors for <span className="font-semibold">{selectedReaction.replace('_', ' ')}</span> on announcement:<br />
+                    <span className="text-xs text-gray-500">{selectedAnnouncement.content.slice(0, 60)}{selectedAnnouncement.content.length > 60 ? '...' : ''}</span>
+                  </span>
+                ) : 'Reactors'}
+              </DialogTitle>
+            </DialogHeader>
+            {reactorsLoading ? (
+              <div className="py-4 text-center">Loading...</div>
+            ) : reactors.length === 0 ? (
+              <div className="py-4 text-center text-gray-500">No parents have reacted with this emoji yet.</div>
+            ) : (
+              <ul className="space-y-2 py-2">
+                {reactors.map((parent) => (
+                  <li key={parent.id} className="flex items-center space-x-3">
+                    <Users className="w-4 h-4 text-blue-600" />
+                    <span className="font-medium">{parent.name}</span>
+                    {parent.email && <span className="text-gray-500 text-xs">({parent.email})</span>}
+                  </li>
+                ))}
+              </ul>
             )}
           </DialogContent>
         </Dialog>

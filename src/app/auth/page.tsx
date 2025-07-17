@@ -14,10 +14,10 @@ export default function AuthPage() {
       <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">
-            Teacher-Parent App
+            TrackWise
           </h1>
           <p className="text-gray-600">
-            Connect teachers and parents for better communication
+            Smart student progress tracking and communication
           </p>
         </div>
 
@@ -29,7 +29,7 @@ export default function AuthPage() {
             <CardDescription>
               {isLogin 
                 ? 'Sign in to your account to continue' 
-                : 'Join our community of teachers and parents'
+                : 'Join our community of educators and parents'
               }
             </CardDescription>
           </CardHeader>

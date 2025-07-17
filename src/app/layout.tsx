@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Teacher-Parent Communication App",
+  title: "TrackWise",
   description: "Connect teachers and parents for better communication",
 };
 

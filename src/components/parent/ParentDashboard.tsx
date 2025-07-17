@@ -13,7 +13,11 @@ import {
   Calendar,
   Users,
   Mail,
-  Eye
+  Eye,
+  ThumbsUp,
+  Heart,
+  Star,
+  Smile
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
@@ -49,10 +53,26 @@ interface Post {
   student?: Student
 }
 
+interface ClassAnnouncement {
+  id: string
+  content: string
+  created_at: string
+  teacher?: Teacher
+  class?: Class
+  reactions?: {
+    thumbs_up: number
+    heart: number
+    clap: number
+    smile: number
+  }
+  userReactions?: string[]
+}
+
 export default function ParentDashboard() {
   const { user } = useAuth()
   const [students, setStudents] = useState<Student[]>([])
   const [posts, setPosts] = useState<Post[]>([])
+  const [classAnnouncements, setClassAnnouncements] = useState<ClassAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     children: 0,
@@ -183,6 +203,83 @@ export default function ParentDashboard() {
 
       setPosts(allPosts)
 
+      // Get class announcements for all classes this parents children are in
+      let allClassAnnouncements: ClassAnnouncement[] = []
+      if (classIds.length > 0) {
+        const { data: announcementsData, error: announcementsError } = await supabase
+          .from('posts')
+          .select(`
+            id,
+            content,
+            created_at,
+            class_id,
+            teachers (
+              id,
+              name,
+              email
+            ),
+            classes (
+              id,
+              name
+            )
+          `)
+          .in('class_id', classIds)
+          .not('class_id', 'is', null)
+          .order('created_at', { ascending: false })
+
+        if (announcementsError) {
+          console.error('Error fetching class announcements:', announcementsError)
+        } else {
+          // Transform announcements data and fetch reactions
+          allClassAnnouncements = await Promise.all(
+            (announcementsData || []).map(async (item: any) => {
+              // Get reaction counts for this announcement
+              const { data: reactionCounts, error: reactionCountsError } = await supabase
+                .from('post_reactions')
+                .select('reaction_type')
+                .eq('post_id', item.id)
+
+              // Get user's reactions for this announcement
+              const { data: userReactions, error: userReactionsError } = await supabase
+                .from('post_reactions')
+                .select('reaction_type')
+                .eq('post_id', item.id)
+                .eq('parent_id', user.id)
+
+              // Calculate reaction counts
+              const reactions = {
+                thumbs_up: 0,
+                heart: 0,
+                clap: 0,
+                smile:0               }
+
+              if (!reactionCountsError && reactionCounts) {
+                reactionCounts.forEach((reaction: any) => {
+                  if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                    reactions[reaction.reaction_type as keyof typeof reactions]++
+                  }
+                })
+              }
+
+              // Get user's reactions
+              const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+              return {
+                id: item.id,
+                content: item.content,
+                created_at: item.created_at,
+                teacher: item.teachers,
+                class: item.classes,
+                reactions,
+                userReactions: userReactionTypes
+              }
+            })
+          )
+        }
+      }
+
+      setClassAnnouncements(allClassAnnouncements)
+
       // Calculate stats
       const uniqueClasses = new Set(studentsData.map(s => s.class_id).filter(Boolean))
       setStats({
@@ -196,6 +293,111 @@ export default function ParentDashboard() {
       toast.error('Error loading dashboard data')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const handleReaction = async (announcementId: string, reactionType: string) => {
+    if (!user) return
+
+    // Find the announcement in state
+    const announcementIndex = classAnnouncements.findIndex(a => a.id === announcementId)
+    if (announcementIndex === -1) return
+
+    const announcement = classAnnouncements[announcementIndex]
+    const userHasReaction = announcement.userReactions?.includes(reactionType) || false
+
+    // Optimistic update - update UI immediately
+    const updatedAnnouncements = [...classAnnouncements]
+    const updatedAnnouncement = { ...announcement }
+    
+    if (!updatedAnnouncement.reactions) updatedAnnouncement.reactions = { thumbs_up: 0, heart: 0, clap:0, smile: 0 }
+    if (!updatedAnnouncement.userReactions) updatedAnnouncement.userReactions = []
+
+    if (userHasReaction) {
+      // Remove reaction
+      updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]--
+      updatedAnnouncement.userReactions = updatedAnnouncement.userReactions.filter(r => r !== reactionType)
+    } else {
+      // Add reaction
+      updatedAnnouncement.reactions[reactionType as keyof typeof updatedAnnouncement.reactions]++
+      updatedAnnouncement.userReactions = [...updatedAnnouncement.userReactions, reactionType]
+    }
+
+    updatedAnnouncements[announcementIndex] = updatedAnnouncement
+    setClassAnnouncements(updatedAnnouncements)
+
+    try {
+      if (userHasReaction) {
+        // Remove reaction from database
+        const { error: deleteError } = await supabase
+          .from('post_reactions')
+          .delete()
+          .eq('post_id', announcementId)
+          .eq('parent_id', user.id)
+          .eq('reaction_type', reactionType)
+
+        if (deleteError) {
+          console.error('Error removing reaction:', deleteError)
+          toast.error('Error removing reaction')
+          // Revert optimistic update
+          setClassAnnouncements(classAnnouncements)
+          return
+        }
+      } else {
+        // Add reaction to database
+        const { error: insertError } = await supabase
+          .from('post_reactions')
+          .insert([{
+            post_id: announcementId,
+            parent_id: user.id,
+            reaction_type: reactionType
+          }])
+
+        if (insertError) {
+          console.error('Error adding reaction:', insertError)
+          toast.error('Error adding reaction')
+          // Revert optimistic update
+          setClassAnnouncements(classAnnouncements)
+          return
+        }
+      }
+
+      // Success - no need to revert, UI is already updated
+    } catch (error) {
+      console.error('Error handling reaction:', error)
+      toast.error('Error updating reaction')
+      // Revert optimistic update
+      setClassAnnouncements(classAnnouncements)
+    }
+  }
+
+  const getReactionIcon = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return <ThumbsUp className="w-4 h-4" />
+      case 'heart':
+        return <Heart className="w-4 h-4" />
+      case 'clap':
+        return <Star className="w-4 h-4" />
+      case 'smile':
+        return <Smile className="w-4 h-4" />
+      default:
+        return <ThumbsUp className="w-4 h-4" />
+    }
+  }
+
+  const getReactionColor = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return 'text-blue-600 hover:text-blue-700'
+      case 'heart':
+        return 'text-red-600 hover:text-red-700'
+      case 'clap':
+        return 'text-yellow-600 hover:text-yellow-700'
+      case 'smile':
+        return 'text-green-600 hover:text-green-700'
+      default:
+        return 'text-gray-600 hover:text-gray-700'
     }
   }
 
@@ -268,6 +470,100 @@ export default function ParentDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Class Announcements Section */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center space-x-2">
+              <MessageSquare className="w-5 h-5" />
+              <span>Class Announcements</span>
+            </CardTitle>
+            <CardDescription>
+              Important announcements from your children's teachers for entire classes
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {classAnnouncements.length === 0 ? (
+              <div className="text-center py-8">
+                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900">No Class Announcements</h3>
+                <p className="text-gray-600">
+                  Teachers will post class-wide announcements here when available.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {classAnnouncements.slice(0, 3).map((announcement) => (
+                  <div key={announcement.id} className="border rounded-lg p-4">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className="flex items-center space-x-2">
+                        {announcement.teacher && (
+                          <span className="text-sm font-medium text-blue-600">
+                            {announcement.teacher.name}
+                          </span>
+                        )}
+                        {announcement.class && (
+                          <span className="text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                            {announcement.class.name}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-sm text-gray-500">
+                        {new Date(announcement.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                    <p className="text-gray-600 whitespace-pre-wrap text-sm">{announcement.content}</p>
+                    <div className="flex items-center mt-4 space-x-2">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReaction(announcement.id, 'thumbs_up')}
+                        className={`${getReactionColor('thumbs_up')} ${announcement.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''}`}
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        {announcement.reactions?.thumbs_up}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReaction(announcement.id, 'heart')}
+                        className={`${getReactionColor('heart')} ${announcement.userReactions?.includes('heart') ? 'text-red-600' : ''}`}
+                      >
+                        <Heart className="w-4 h-4" />
+                        {announcement.reactions?.heart}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReaction(announcement.id, 'clap')}
+                        className={`${getReactionColor('clap')} ${announcement.userReactions?.includes('clap') ? 'text-yellow-600' : ''}`}
+                      >
+                        <Star className="w-4 h-4" />
+                        {announcement.reactions?.clap}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleReaction(announcement.id, 'smile')}
+                        className={`${getReactionColor('smile')} ${announcement.userReactions?.includes('smile') ? 'text-green-600' : ''}`}
+                      >
+                        <Smile className="w-4 h-4" />
+                        {announcement.reactions?.smile}
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+                {classAnnouncements.length > 3 && (
+                  <div className="text-center pt-4">
+                    <Button variant="outline" size="sm">
+                      View All Announcements
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <div className="grid gap-6 lg:grid-cols-2">
           {/* Children Section */}

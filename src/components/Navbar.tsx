@@ -260,9 +260,7 @@ export default function Navbar() {
       <div className="flex items-center justify-between">
         {/* Left side - App title */}
         <div className="flex items-center space-x-4">
-          <h1 className="text-xl font-semibold text-gray-900">
-            Teacher-Parent Communication
-          </h1>
+          {/* TrackWise title removed to avoid redundancy with sidebar */}
         </div>
 
         {/* Right side - User menu */}
