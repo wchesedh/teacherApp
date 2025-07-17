@@ -59,6 +59,9 @@ interface ClassAnnouncement {
   created_at: string
   teacher?: Teacher
   class?: Class
+  image_url?: string
+  file_url?: string
+  file_name?: string
   reactions?: {
     thumbs_up: number
     heart: number
@@ -276,6 +279,9 @@ export default function TeacherDashboard() {
           content,
           created_at,
           class_id,
+          image_url,
+          file_url,
+          file_name,
           teachers (
             id,
             name,
@@ -327,6 +333,9 @@ export default function TeacherDashboard() {
             created_at: item.created_at,
             teacher: item.teachers,
             class: item.classes,
+            image_url: item.image_url,
+            file_url: item.file_url,
+            file_name: item.file_name,
             reactions,
             userReactions: []  // Teachers don't react to their own posts
           }
@@ -623,6 +632,43 @@ export default function TeacherDashboard() {
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
                     
+                    {/* Display image if present */}
+                    {announcement.image_url && (
+                      <div className="mt-3">
+                        <img 
+                          src={announcement.image_url} 
+                          alt="Announcement attachment" 
+                          className="max-w-full h-auto rounded-lg border" 
+                          style={{ maxHeight: 400 }} 
+                        />
+                      </div>
+                    )}
+                    
+                    {/* Display file attachment if present */}
+                    {announcement.file_url && !announcement.image_url && (
+                      announcement.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                        <div className="mt-3">
+                          <img 
+                            src={announcement.file_url} 
+                            alt="Announcement attachment" 
+                            className="max-w-full h-auto rounded-lg border" 
+                            style={{ maxHeight: 400 }} 
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-3">
+                          <a 
+                            href={announcement.file_url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 underline hover:text-blue-800"
+                          >
+                            📎 {announcement.file_name || 'Download attachment'}
+                          </a>
+                        </div>
+                      )
+                    )}
+                    
                     {/* Reaction counts (read-only for teachers) */}
                     <div className="flex items-center space-x-4 text-sm text-gray-500">
                       {announcement.reactions && (
@@ -720,11 +766,11 @@ export default function TeacherDashboard() {
               <div className="space-y-4">
                 {classes.map((classItem) => (
                   <div key={classItem.id} className="border rounded-lg">
-                    <div 
-                      className="flex items-center justify-between p-4 cursor-pointer hover:bg-gray-50"
-                      onClick={() => toggleClassExpansion(classItem.id)}
-                    >
-                      <div className="flex items-center space-x-3">
+                    <div className="flex items-center justify-between p-4">
+                      <div 
+                        className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded flex-1"
+                        onClick={() => toggleClassExpansion(classItem.id)}
+                      >
                         {expandedClasses.includes(classItem.id) ? (
                           <ChevronDown className="h-4 w-4 text-gray-500" />
                         ) : (
@@ -746,8 +792,7 @@ export default function TeacherDashboard() {
                         <Button 
                           size="sm" 
                           variant="outline"
-                          onClick={(e) => {
-                            e.stopPropagation()
+                          onClick={() => {
                             setSelectedClassForStudent(classItem.id)
                             setIsAddStudentOpen(true)
                           }}
