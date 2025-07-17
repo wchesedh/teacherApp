@@ -246,6 +246,8 @@ export default function TeacherDashboard() {
       )
 
       setClasses(classesWithDetails)
+      // Auto-expand all classes by default
+      setExpandedClasses(classesWithDetails.map(classItem => classItem.id))
     } catch (error) {
       console.error('Error fetching classes with details:', error)
     }
@@ -729,9 +731,11 @@ export default function TeacherDashboard() {
                 ))}
                 {classAnnouncements.length > 3 && (
                   <div className="text-center pt-4">
-                    <Button variant="outline" size="sm">
-                      View All Announcements
-                    </Button>
+                    <Link href="/teacher/announcements">
+                      <Button variant="outline" size="sm">
+                        View All Announcements
+                      </Button>
+                    </Link>
                   </div>
                 )}
               </div>

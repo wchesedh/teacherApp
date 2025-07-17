@@ -97,6 +97,7 @@ export default function Sidebar({ className }: SidebarProps) {
       title: 'Communication',
       icon: MessageSquare,
       items: [
+        { title: 'All Announcements', href: '/teacher/announcements', icon: MessageSquare },
         { title: 'Create Post', href: '/teacher/posts/create', icon: MessageSquare },
         { title: 'My Posts', href: '/teacher/posts', icon: MessageSquare },
       ]
