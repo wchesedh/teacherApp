@@ -205,8 +205,8 @@ export default function ClassPostsPage() {
       } else {
         setReactors((data || []).map(r => ({
           id: r.parent_id,
-          name: r.parents?.name || 'Unknown',
-          email: r.parents?.email || ''
+          name: Array.isArray(r.parents) ? (r.parents[0]?.name || 'Unknown') : (r.parents?.name || 'Unknown'),
+          email: Array.isArray(r.parents) ? (r.parents[0]?.email || '') : (r.parents?.email || '')
         })));
       }
     } catch (e) {
