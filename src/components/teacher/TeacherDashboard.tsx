@@ -92,7 +92,7 @@ export default function TeacherDashboard() {
   const [showCredentials, setShowCredentials] = useState(false)
   const [parentCredentials, setParentCredentials] = useState<{ email: string; password: string } | null>(null)
   const [showReactorsDialog, setShowReactorsDialog] = useState(false);
-  const [reactors, setReactors] = useState<Parent[]>([]);
+  const [reactors, setReactors] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [reactorsLoading, setReactorsLoading] = useState(false);
   const [selectedReaction, setSelectedReaction] = useState<string | null>(null);
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<ClassAnnouncement | null>(null);
@@ -536,18 +536,21 @@ export default function TeacherDashboard() {
     try {
       const { data, error } = await supabase
         .from('post_reactions')
-        .select('parent_id, parents(name, email)')
+        .select('parent_id, parents(name, email, created_at)')
         .eq('post_id', announcementId)
         .eq('reaction_type', reactionType);
       if (error) {
         toast.error('Error fetching reactors');
         setReactors([]);
       } else {
-        setReactors((data || []).map(r => ({
-          id: r.parent_id,
-          name: r.parents?.name || 'Unknown',
-          email: r.parents?.email || ''
-        })));
+        setReactors((data || []).map((r: any) => {
+          const parent = Array.isArray(r.parents) ? r.parents[0] : r.parents;
+          return {
+            id: r.parent_id,
+            name: parent?.name || 'Unknown',
+            email: parent?.email || ''
+          };
+        }));
       }
     } catch (e) {
       toast.error('Error fetching reactors');
