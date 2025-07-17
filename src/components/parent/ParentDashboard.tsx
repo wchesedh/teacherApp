@@ -68,6 +68,8 @@ interface ClassAnnouncement {
   teacher?: Teacher
   class?: Class
   image_url?: string
+  file_url?: string
+  file_name?: string
   reactions?: {
     thumbs_up: number
     heart: number
@@ -268,7 +270,9 @@ export default function ParentDashboard() {
               id,
               name
             ),
-            image_url
+            image_url,
+            file_url,
+            file_name
           `)
           .in('class_id', classIds)
           .not('class_id', 'is', null)
@@ -318,6 +322,8 @@ export default function ParentDashboard() {
                 teacher: item.teachers,
                 class: item.classes,
                 image_url: item.image_url,
+                file_url: item.file_url,
+                file_name: item.file_name,
                 reactions,
                 userReactions: userReactionTypes
               }
@@ -586,15 +592,28 @@ export default function ParentDashboard() {
                       </span>
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
-                    {announcement.image_url && (
-                      <div className="mt-3">
-                        <img 
-                          src={announcement.image_url} 
-                          alt="Post image"
-                          className="max-w-full h-auto rounded-lg border"
-                          style={{ maxHeight: 400 }}
-                        />
-                      </div>
+                    {announcement.file_url && (
+                      announcement.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                        <div className="mt-3">
+                          <img 
+                            src={announcement.file_url} 
+                            alt="Announcement attachment"
+                            className="max-w-full h-auto rounded-lg border"
+                            style={{ maxHeight: 400 }}
+                          />
+                        </div>
+                      ) : (
+                        <div className="mt-3">
+                          <a 
+                            href={announcement.file_url} 
+                            target="_blank"
+                            rel="noopener noreferrer" 
+                            className="text-blue-600 underline hover:text-blue-800"
+                          >
+                            📎 {announcement.file_name || 'Download attachment'}
+                          </a>
+                        </div>
+                      )
                     )}
                     <div className="flex items-center mt-4 space-x-2">
                       <Button
