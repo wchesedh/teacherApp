@@ -203,7 +203,7 @@ export default function ClassPostsPage() {
         toast.error('Error fetching reactors');
         setReactors([]);
       } else {
-        setReactors((data || []).map(r => ({
+        setReactors((data as any[] || []).map(r => ({
           id: r.parent_id,
           name: Array.isArray(r.parents) ? (r.parents[0]?.name || 'Unknown') : (r.parents?.name || 'Unknown'),
           email: Array.isArray(r.parents) ? (r.parents[0]?.email || '') : (r.parents?.email || '')
