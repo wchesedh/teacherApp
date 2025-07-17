@@ -485,7 +485,7 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file
       const filePath = fileName;
       const { error } = await supabase.storage.from('class-announcements').upload(filePath, file);
       if (error) {
-        toast.error('Error uploading file: ' + (error.message || error.error_description || JSON.stringify(error)));
+        toast.error('Error uploading file: ' + (error.message || JSON.stringify(error)));
         return null;
       }
       const { data } = supabase.storage.from('class-announcements').getPublicUrl(filePath);
