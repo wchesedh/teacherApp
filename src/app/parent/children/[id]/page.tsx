@@ -21,7 +21,11 @@ import {
   Save,
   X,
   Settings,
-  Users
+  Users,
+  ThumbsUp,
+  Heart,
+  Star,
+  Smile
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -66,11 +70,18 @@ interface Post {
   content: string
   created_at: string
   teacher?: Teacher
+  reactions?: {
+    thumbs_up: number
+    heart: number
+    clap: number
+    smile: number
+  }
+  userReactions?: string[]
 }
 
 export default function ParentStudentProfilePage() {
   const params = useParams()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const studentId = params.id as string
   
   const [student, setStudent] = useState<Student | null>(null)
@@ -94,12 +105,13 @@ export default function ParentStudentProfilePage() {
     grade: '',
     age: ''
   })
+  const [reactingPosts, setReactingPosts] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (studentId) {
+    if (studentId && user && !authLoading) {
       fetchStudentDetails()
     }
-  }, [studentId])
+  }, [studentId, user, authLoading])
 
   const fetchStudentDetails = async () => {
     try {
@@ -196,15 +208,52 @@ export default function ParentStudentProfilePage() {
         console.error('Error fetching post tags:', tagError)
         setPosts([])
       } else if (tagData && tagData.length > 0) {
-        // Transform posts data
-        const postsData = tagData.map((item: any) => ({
-          id: item.posts.id,
-          content: item.posts.content,
-          created_at: item.posts.created_at,
-          teacher: item.posts.teachers
-        }))
+        // Transform posts data and fetch reactions
+        const postsWithReactions = await Promise.all(
+          tagData.map(async (item: any) => {
+            // Get reaction counts for this post
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', item.posts.id)
+
+            // Calculate reaction counts
+            const reactions = {
+              thumbs_up: 0,
+              heart: 0,
+              clap: 0,
+              smile: 0
+            }
+
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+
+            // Get user's reactions for this post
+            const { data: userReactions, error: userReactionsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', item.posts.id)
+              .eq('parent_id', user?.id)
+
+            const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+            return {
+              id: item.posts.id,
+              content: item.posts.content,
+              created_at: item.posts.created_at,
+              teacher: item.posts.teachers,
+              reactions,
+              userReactions: userReactionTypes
+            }
+          })
+        )
         
-        setPosts(postsData)
+        setPosts(postsWithReactions)
       } else {
         setPosts([])
       }
@@ -368,7 +417,108 @@ export default function ParentStudentProfilePage() {
     }
   }
 
-  if (loading) {
+  const handleReaction = async (postId: string, reactionType: string) => {
+    if (!user) return
+
+    try {
+      setReactingPosts(prev => new Set(prev).add(postId))
+
+      // Check if user already reacted with this type
+      const { data: existingReaction, error: checkError } = await supabase
+        .from('post_reactions')
+        .select('*')
+        .eq('post_id', postId)
+        .eq('parent_id', user.id)
+        .eq('reaction_type', reactionType)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing reaction:', checkError)
+        toast.error('Error updating reaction')
+        return
+      }
+
+      if (existingReaction) {
+        // Remove reaction
+        const { error: deleteError } = await supabase
+          .from('post_reactions')
+          .delete()
+          .eq('post_id', postId)
+          .eq('parent_id', user.id)
+          .eq('reaction_type', reactionType)
+
+        if (deleteError) {
+          console.error('Error removing reaction:', deleteError)
+          toast.error('Error removing reaction')
+          return
+        }
+
+        toast.success('Reaction removed')
+      } else {
+        // Add reaction
+        const { error: insertError } = await supabase
+          .from('post_reactions')
+          .insert([{
+            post_id: postId,
+            parent_id: user.id,
+            reaction_type: reactionType
+          }])
+
+        if (insertError) {
+          console.error('Error adding reaction:', insertError)
+          toast.error('Error adding reaction')
+          return
+        }
+
+        toast.success('Reaction added')
+      }
+
+      // Refresh posts to update reaction counts
+      await fetchStudentDetails()
+
+    } catch (error) {
+      console.error('Error handling reaction:', error)
+      toast.error('Error updating reaction')
+    } finally {
+      setReactingPosts(prev => {
+        const newSet = new Set(prev)
+        newSet.delete(postId)
+        return newSet
+      })
+    }
+  }
+
+  const getReactionIcon = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return <ThumbsUp className="w-4 h-4" />
+      case 'heart':
+        return <Heart className="w-4 h-4" />
+      case 'clap':
+        return <Star className="w-4 h-4" />
+      case 'smile':
+        return <Smile className="w-4 h-4" />
+      default:
+        return <ThumbsUp className="w-4 h-4" />
+    }
+  }
+
+  const getReactionColor = (type: string, isActive: boolean) => {
+    switch (type) {
+      case 'thumbs_up':
+        return isActive ? 'text-blue-600 bg-blue-100' : 'text-blue-600 hover:text-blue-700'
+      case 'heart':
+        return isActive ? 'text-red-600 bg-red-100' : 'text-red-600 hover:text-red-700'
+      case 'clap':
+        return isActive ? 'text-yellow-600 bg-yellow-100' : 'text-yellow-600 hover:text-yellow-700'
+      case 'smile':
+        return isActive ? 'text-green-600 bg-green-100' : 'text-green-600 hover:text-green-700'
+      default:
+        return isActive ? 'text-gray-600 bg-gray-100' : 'text-gray-600 hover:text-gray-700'
+    }
+  }
+
+  if (loading || authLoading) {
     return (
       <Layout>
         <div className="p-8">
@@ -377,6 +527,21 @@ export default function ParentStudentProfilePage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-2 text-gray-600">Loading student details...</p>
             </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (!user) {
+    return (
+      <Layout>
+        <div className="p-8">
+          <div className="text-center py-8">
+            <p className="text-gray-600">Please log in to view student details</p>
+            <Link href="/auth" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
+              ← Go to Login
+            </Link>
           </div>
         </div>
       </Layout>
@@ -713,7 +878,33 @@ export default function ParentStudentProfilePage() {
                             </span>
                           </div>
                         </div>
-                        <p className="text-gray-600 whitespace-pre-wrap text-sm">{post.content}</p>
+                        <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{post.content}</p>
+                        
+                        {/* Reaction buttons */}
+                        <div className="flex items-center space-x-4 text-sm">
+                          {['thumbs_up', 'heart', 'clap', 'smile'].map((reactionType) => {
+                            const isActive = post.userReactions?.includes(reactionType) || false
+                            const count = post.reactions?.[reactionType as keyof typeof post.reactions] || 0
+                            
+                            return (
+                              <button
+                                key={reactionType}
+                                type="button"
+                                disabled={reactingPosts.has(post.id)}
+                                onClick={() => handleReaction(post.id, reactionType)}
+                                className={`flex items-center space-x-1 px-2 py-1 rounded-full transition-colors ${
+                                  isActive 
+                                    ? getReactionColor(reactionType, true)
+                                    : 'text-gray-500 hover:text-gray-700'
+                                } ${reactingPosts.has(post.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                                title={`${reactionType.replace('_', ' ')}`}
+                              >
+                                {getReactionIcon(reactionType)}
+                                {count > 0 && <span className="text-xs">{count}</span>}
+                              </button>
+                            )
+                          })}
+                        </div>
                       </div>
                     ))}
                   </div>

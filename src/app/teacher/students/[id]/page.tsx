@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Badge } from '@/components/ui/badge'
 import { 
   GraduationCap, 
   User, 
@@ -16,12 +17,17 @@ import {
   MessageSquare, 
   ArrowLeft,
   BookOpen,
+  Camera,
+  Edit,
+  Save,
+  X,
+  Settings,
+  Users,
   ThumbsUp,
   Heart,
   Star,
   Smile,
   MoreVertical,
-  Edit,
   Trash2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
@@ -29,17 +35,29 @@ import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
+import { formatFullName } from '@/lib/utils'
 
 interface Student {
   id: string
-  name: string
+  first_name: string
+  middle_name?: string
+  last_name: string
+  suffix?: string
   class_id: string
   created_at: string
+  avatar_url?: string
+  bio?: string
+  grade?: string
+  age?: number | null
   parents?: Parent[]
 }
 
 interface Parent {
   id: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
   name: string
   email: string | null
   created_at: string
@@ -49,6 +67,17 @@ interface Class {
   id: string
   name: string
   teacher_id: string
+  teacher?: Teacher
+}
+
+interface Teacher {
+  id: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
+  name: string
+  email: string
 }
 
 interface Post {
@@ -66,7 +95,7 @@ interface Post {
 
 export default function StudentProfilePage() {
   const params = useParams()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const studentId = params.id as string
   
   const [student, setStudent] = useState<Student | null>(null)
@@ -74,7 +103,6 @@ export default function StudentProfilePage() {
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
-  // Add state for reactors dialog:
   const [showReactorsDialog, setShowReactorsDialog] = useState(false);
   const [reactors, setReactors] = useState<any[]>([]);
   const [reactorsLoading, setReactorsLoading] = useState(false);
@@ -85,12 +113,29 @@ export default function StudentProfilePage() {
   const [editContent, setEditContent] = useState('');
   const [editLoading, setEditLoading] = useState(false);
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set());
+  const [editMode, setEditMode] = useState(false)
+  const [showAvatarDialog, setShowAvatarDialog] = useState(false)
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [stats, setStats] = useState({
+    posts: 0,
+    teachers: 0,
+    classmates: 0
+  })
+  const [editForm, setEditForm] = useState({
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    suffix: '',
+    bio: '',
+    grade: '',
+    age: ''
+  })
 
   useEffect(() => {
-    if (studentId) {
+    if (studentId && user && !authLoading) {
       fetchStudentDetails()
     }
-  }, [studentId])
+  }, [studentId, user, authLoading])
 
   const fetchStudentDetails = async () => {
     try {
@@ -151,18 +196,22 @@ export default function StudentProfilePage() {
         }
       }
 
-      // First, let's check if the post_student_tags table exists and has data
-      console.log('Fetching posts for student:', studentId)
-      console.log('Current user ID:', user?.id)
-      
-      // Try a simpler approach - first get the post IDs for this student
+      // Set edit form
+      setEditForm({
+        first_name: studentData.first_name || '',
+        middle_name: studentData.middle_name || '',
+        last_name: studentData.last_name || '',
+        suffix: studentData.suffix || '',
+        bio: studentData.bio || '',
+        grade: studentData.grade || '',
+        age: studentData.age?.toString() || ''
+      })
+
+      // Fetch posts for this student
       const { data: tagData, error: tagError } = await supabase
         .from('post_student_tags')
         .select('post_id')
         .eq('student_id', studentId)
-
-      console.log('Tag data:', tagData)
-      console.log('Tag error:', tagError)
 
       if (tagError) {
         console.error('Error fetching post tags:', tagError)
@@ -178,9 +227,6 @@ export default function StudentProfilePage() {
           .in('id', postIds)
           .eq('teacher_id', user?.id)
           .order('created_at', { ascending: false })
-
-        console.log('Posts data:', postsData)
-        console.log('Posts error:', postsError)
 
         if (postsError) {
           console.error('Error fetching posts:', postsError)
@@ -212,15 +258,146 @@ export default function StudentProfilePage() {
           setPosts(postsWithReactions)
         }
       } else {
-        // No posts found for this student
         setPosts([])
       }
+
+      // Fetch stats after all data is loaded
+      await fetchStudentStats(studentData, classData)
 
     } catch (error) {
       console.error('Error fetching student details:', error)
       toast.error('Error fetching student details')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchStudentStats = async (studentData?: Student, classData?: Class | null) => {
+    const currentStudent = studentData || student
+    const currentClassInfo = classData || classInfo
+    
+    if (!currentStudent) return
+
+    try {
+      // Count posts for this student
+      const { count: postsCount, error: postsError } = await supabase
+        .from('post_student_tags')
+        .select('*', { count: 'exact', head: true })
+        .eq('student_id', currentStudent.id)
+
+      // Count classmates (students in the same class)
+      const { count: classmatesCount, error: classmatesError } = await supabase
+        .from('students')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_id', currentStudent.class_id)
+
+      // Count teachers (usually 1, but could be more if multiple teachers per class)
+      let teachersCount = 0
+      if (currentClassInfo?.teacher) {
+        teachersCount = 1
+      }
+
+      setStats({
+        posts: postsCount || 0,
+        teachers: teachersCount,
+        classmates: classmatesCount || 0
+      })
+
+    } catch (error) {
+      console.error('Error fetching student stats:', error)
+    }
+  }
+
+  const handleAvatarUpload = async (file: File) => {
+    if (!student) return
+
+    try {
+      setUploadingAvatar(true)
+
+      // Upload to Supabase Storage
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${student.id}-${Date.now()}.${fileExt}`
+      const { data, error } = await supabase.storage
+        .from('avatars')
+        .upload(fileName, file)
+
+      if (error) {
+        console.error('Error uploading avatar:', error)
+        toast.error('Error uploading avatar')
+        return
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(fileName)
+
+      // Update student record
+      const { error: updateError } = await supabase
+        .from('students')
+        .update({ avatar_url: publicUrl })
+        .eq('id', student.id)
+
+      if (updateError) {
+        console.error('Error updating student avatar:', updateError)
+        toast.error('Error updating student avatar')
+        return
+      }
+
+      // Update local state
+      setStudent(prev => prev ? { ...prev, avatar_url: publicUrl } : null)
+      toast.success('Avatar updated successfully!')
+      setShowAvatarDialog(false)
+
+    } catch (error) {
+      console.error('Error uploading avatar:', error)
+      toast.error('Error uploading avatar')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
+
+  const handleSaveProfile = async () => {
+    if (!student) return
+
+    try {
+      const { error } = await supabase
+        .from('students')
+        .update({
+          first_name: editForm.first_name,
+          middle_name: editForm.middle_name || undefined,
+          last_name: editForm.last_name,
+          suffix: editForm.suffix || undefined,
+          bio: editForm.bio || undefined,
+          grade: editForm.grade || undefined,
+          age: editForm.age ? parseInt(editForm.age) : undefined
+        })
+        .eq('id', student.id)
+
+      if (error) {
+        console.error('Error updating student:', error)
+        toast.error('Error updating student profile')
+        return
+      }
+
+      // Update local state
+      setStudent(prev => prev ? {
+        ...prev,
+        first_name: editForm.first_name,
+        middle_name: editForm.middle_name || undefined,
+        last_name: editForm.last_name,
+        suffix: editForm.suffix || undefined,
+        bio: editForm.bio || undefined,
+        grade: editForm.grade || undefined,
+        age: editForm.age ? parseInt(editForm.age) : undefined
+      } : null)
+
+      setEditMode(false)
+      toast.success('Profile updated successfully!')
+
+    } catch (error) {
+      console.error('Error updating student profile:', error)
+      toast.error('Error updating student profile')
     }
   }
 
@@ -382,7 +559,7 @@ export default function StudentProfilePage() {
     }
   };
 
-  if (loading) {
+  if (loading || authLoading) {
     return (
       <Layout>
         <div className="p-8">
@@ -391,6 +568,21 @@ export default function StudentProfilePage() {
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
               <p className="mt-2 text-gray-600">Loading student details...</p>
             </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
+  if (!user) {
+    return (
+      <Layout>
+        <div className="p-8">
+          <div className="text-center py-8">
+            <p className="text-gray-600">Please log in to view student details</p>
+            <Link href="/auth" className="text-blue-600 hover:text-blue-800 mt-2 inline-block">
+              ← Go to Login
+            </Link>
           </div>
         </div>
       </Layout>
@@ -423,7 +615,7 @@ export default function StudentProfilePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {student.name}'s Profile
+                {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s Profile
               </h1>
               <p className="text-gray-600 mt-2">
                 Student details and progress updates
@@ -432,24 +624,166 @@ export default function StudentProfilePage() {
           </div>
         </div>
 
+        {/* Stats Cards */}
+        <div className="grid gap-6 md:grid-cols-3 mb-8">
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Posts</CardTitle>
+              <MessageSquare className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.posts}</div>
+              <p className="text-xs text-muted-foreground">
+                Progress updates
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Teachers</CardTitle>
+              <GraduationCap className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.teachers}</div>
+              <p className="text-xs text-muted-foreground">
+                Teaching this student
+              </p>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardTitle className="text-sm font-medium">Classmates</CardTitle>
+              <Users className="h-4 w-4 text-muted-foreground" />
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{stats.classmates}</div>
+              <p className="text-xs text-muted-foreground">
+                In the same class
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Student Info */}
           <div className="lg:col-span-1">
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center space-x-2">
-                  <GraduationCap className="w-5 h-5" />
-                  <span>Student Information</span>
-                </CardTitle>
+                <div className="flex items-center justify-between">
+                  <CardTitle className="flex items-center space-x-2">
+                    <GraduationCap className="w-5 h-5" />
+                    <span>Student Information</span>
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setEditMode(!editMode)}
+                  >
+                    {editMode ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div className="flex items-center space-x-3">
-                  <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                    <GraduationCap className="w-6 h-6 text-blue-600" />
+                  <div className="relative">
+                    {student.avatar_url ? (
+                      <img 
+                        src={student.avatar_url} 
+                        alt="Student avatar" 
+                        className="w-12 h-12 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                        <GraduationCap className="w-6 h-6 text-blue-600" />
+                      </div>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="absolute -bottom-1 -right-1 w-6 h-6 p-0 rounded-full"
+                      onClick={() => setShowAvatarDialog(true)}
+                    >
+                      <Camera className="w-3 h-3" />
+                    </Button>
                   </div>
                   <div>
-                    <h3 className="text-lg font-semibold">{student.name}</h3>
-                    <p className="text-sm text-gray-600">Student</p>
+                    {editMode ? (
+                      <div className="space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder="First name"
+                            value={editForm.first_name}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Last name"
+                            value={editForm.last_name}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Middle name (optional)"
+                            value={editForm.middle_name}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Suffix (optional)"
+                            value={editForm.suffix}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, suffix: e.target.value }))}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            placeholder="Grade (optional)"
+                            value={editForm.grade}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Age (optional)"
+                            type="number"
+                            value={editForm.age}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
+                          />
+                        </div>
+                        <textarea
+                          placeholder="Bio (optional)"
+                          value={editForm.bio}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                          rows={3}
+                          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                        />
+                        <div className="flex space-x-2">
+                          <Button size="sm" onClick={handleSaveProfile}>
+                            <Save className="w-4 h-4 mr-1" />
+                            Save
+                          </Button>
+                          <Button size="sm" variant="outline" onClick={() => setEditMode(false)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div>
+                        <h3 className="text-lg font-semibold">{formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}</h3>
+                        <p className="text-sm text-gray-600">Student</p>
+                        {student.bio && (
+                          <p className="text-sm text-gray-500 mt-1">{student.bio}</p>
+                        )}
+                        {(student.grade || student.age) && (
+                          <div className="flex items-center space-x-2 mt-1">
+                            {student.grade && (
+                              <Badge variant="secondary">{student.grade}</Badge>
+                            )}
+                            {student.age && (
+                              <Badge variant="outline">{student.age} years old</Badge>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
                 
@@ -514,7 +848,7 @@ export default function StudentProfilePage() {
                       <span>Progress Updates</span>
                     </CardTitle>
                     <CardDescription>
-                      Posts about {student.name}'s progress
+                      Posts about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress
                     </CardDescription>
                   </div>
                   <Button onClick={() => setIsCreatePostOpen(true)}>
@@ -529,7 +863,7 @@ export default function StudentProfilePage() {
                     <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Posts Yet</h3>
                     <p className="text-gray-600 mb-4">
-                      Start sharing updates about {student.name}'s progress with their parents.
+                      Start sharing updates about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress with their parents.
                     </p>
                     <Button onClick={() => setIsCreatePostOpen(true)}>
                       <MessageSquare className="w-4 h-4 mr-2" />
@@ -653,14 +987,14 @@ export default function StudentProfilePage() {
         <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Post About {student.name}</DialogTitle>
+              <DialogTitle>Create Post About {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}</DialogTitle>
               <DialogDescription>
-                Share updates about {student.name}'s progress with their parents
+                Share updates about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress with their parents
               </DialogDescription>
             </DialogHeader>
             <CreatePostForm 
               onSubmit={handleCreatePost}
-              studentName={student.name}
+              studentName={formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}
             />
           </DialogContent>
         </Dialog>
@@ -696,13 +1030,59 @@ export default function StudentProfilePage() {
           </DialogContent>
         </Dialog>
 
+        {/* Avatar Upload Dialog */}
+        <Dialog open={showAvatarDialog} onOpenChange={setShowAvatarDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Update Student Avatar</DialogTitle>
+              <DialogDescription>
+                Upload a profile picture for {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              <div className="flex items-center justify-center">
+                <label className="cursor-pointer">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0]
+                      if (file) {
+                        handleAvatarUpload(file)
+                      }
+                    }}
+                    className="hidden"
+                    disabled={uploadingAvatar}
+                  />
+                  <div className="w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg flex items-center justify-center hover:border-gray-400 transition-colors">
+                    {uploadingAvatar ? (
+                      <div className="text-center">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-2"></div>
+                        <p className="text-sm text-gray-600">Uploading...</p>
+                      </div>
+                    ) : (
+                      <div className="text-center">
+                        <Camera className="w-8 h-8 text-gray-400 mx-auto mb-2" />
+                        <p className="text-sm text-gray-600">Click to upload</p>
+                      </div>
+                    )}
+                  </div>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 text-center">
+                Supported formats: JPG, PNG, GIF. Max size: 5MB
+              </p>
+            </div>
+          </DialogContent>
+        </Dialog>
+
         {/* Edit Post Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
           <DialogContent>
             <DialogHeader>
               <DialogTitle>Edit Post</DialogTitle>
               <DialogDescription>
-                Update the content of your post about {student?.name}
+                Update the content of your post about {student ? formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix) : 'this student'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
