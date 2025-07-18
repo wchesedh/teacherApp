@@ -15,17 +15,18 @@ import {
   Edit,
   Save,
   X,
-  BookOpen,
+  Users,
   GraduationCap,
   MessageSquare,
-  Settings
+  Settings,
+  Heart
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 
-interface Teacher {
+interface Parent {
   id: string
   name: string
   email: string
@@ -33,12 +34,27 @@ interface Teacher {
   avatar_url?: string
   bio?: string
   phone?: string
-  subjects?: string[]
+  children?: Child[]
 }
 
-export default function TeacherProfilePage() {
+interface Child {
+  id: string
+  name: string
+  class_id: string
+  created_at?: string
+  class?: Class
+}
+
+interface Class {
+  id: string
+  name: string
+  teacher_id: string
+  created_at?: string
+}
+
+export default function ParentProfilePage() {
   const { user } = useAuth()
-  const [teacher, setTeacher] = useState<Teacher | null>(null)
+  const [parent, setParent] = useState<Parent | null>(null)
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
   const [showAvatarDialog, setShowAvatarDialog] = useState(false)
@@ -47,47 +63,76 @@ export default function TeacherProfilePage() {
     name: '',
     email: '',
     bio: '',
-    phone: '',
-    subjects: [] as string[]
+    phone: ''
   })
 
   useEffect(() => {
     if (user) {
-      fetchTeacherProfile()
+      fetchParentProfile()
     }
   }, [user])
 
-  const fetchTeacherProfile = async () => {
+  const fetchParentProfile = async () => {
     if (!user) return
 
     try {
       setLoading(true)
 
-      // Fetch teacher info
-      const { data: teacherData, error: teacherError } = await supabase
-        .from('teachers')
-        .select('*')
+      // Fetch parent info with children
+      const { data: parentData, error: parentError } = await supabase
+        .from('parents')
+        .select(`
+          *,
+          student_parent (
+            student_id,
+            students (
+              id,
+              name,
+              class_id,
+              created_at,
+              classes (
+                id,
+                name,
+                teacher_id,
+                created_at
+              )
+            )
+          )
+        `)
         .eq('id', user.id)
         .single()
 
-      if (teacherError) {
-        console.error('Error fetching teacher:', teacherError)
-        toast.error('Error fetching teacher profile')
+      if (parentError) {
+        console.error('Error fetching parent:', parentError)
+        toast.error('Error fetching parent profile')
         return
       }
 
-      setTeacher(teacherData)
+      // Transform the data to match our interface
+      const children = parentData.student_parent?.map((sp: any) => ({
+        id: sp.students.id,
+        name: sp.students.name,
+        class_id: sp.students.class_id,
+        created_at: sp.students.created_at,
+        class: sp.students.classes
+      })) || []
+
+      const parentWithChildren = {
+        ...parentData,
+        children
+      }
+
+      setParent(parentWithChildren)
       setEditForm({
-        name: teacherData.name || '',
-        email: teacherData.email || '',
-        bio: teacherData.bio || '',
-        phone: teacherData.phone || '',
-        subjects: teacherData.subjects || []
+        name: parentData.name || '',
+        email: parentData.email || '',
+        bio: parentData.bio || '',
+        phone: parentData.phone || ''
       })
 
     } catch (error) {
-      console.error('Error fetching teacher profile:', error)
-      toast.error('Error fetching teacher profile')
+      console.error('Error fetching parent profile:', error)
+      toast.error('Error fetching parent profile')
     } finally {
       setLoading(false)
     }
@@ -102,7 +147,7 @@ export default function TeacherProfilePage() {
       // Upload to Supabase Storage
       const fileExt = file.name.split('.').pop()
       const fileName = `${user.id}-${Date.now()}.${fileExt}`
-      const filePath = `teacher-avatars/${fileName}`
+      const filePath = `parent-avatars/${fileName}`
 
       console.log('Attempting to upload file:', {
         fileName,
@@ -144,9 +189,9 @@ export default function TeacherProfilePage() {
 
       console.log('Public URL:', publicUrl)
 
-      // Update teacher record
+      // Update parent record
       const { error: updateError } = await supabase
-        .from('teachers')
+        .from('parents')
         .update({ avatar_url: publicUrl })
         .eq('id', user.id)
 
@@ -157,7 +202,7 @@ export default function TeacherProfilePage() {
       }
 
       // Update local state
-      setTeacher(prev => prev ? { ...prev, avatar_url: publicUrl } : null)
+      setParent(prev => prev ? { ...prev, avatar_url: publicUrl } : null)
       toast.success('Avatar updated successfully!')
       setShowAvatarDialog(false)
 
@@ -174,13 +219,12 @@ export default function TeacherProfilePage() {
 
     try {
       const { error } = await supabase
-        .from('teachers')
+        .from('parents')
         .update({
           name: editForm.name,
           email: editForm.email,
           bio: editForm.bio,
-          phone: editForm.phone,
-          subjects: editForm.subjects
+          phone: editForm.phone
         })
         .eq('id', user.id)
 
@@ -190,7 +234,7 @@ export default function TeacherProfilePage() {
         return
       }
 
-      setTeacher(prev => prev ? { ...prev, ...editForm } : null)
+      setParent(prev => prev ? { ...prev, ...editForm } : null)
       setEditMode(false)
       toast.success('Profile updated successfully!')
 
@@ -198,15 +242,6 @@ export default function TeacherProfilePage() {
       console.error('Error updating profile:', error)
       toast.error('Error updating profile')
     }
-  }
-
-  const handleSubjectChange = (subject: string, checked: boolean) => {
-    setEditForm(prev => ({
-      ...prev,
-      subjects: checked 
-        ? [...prev.subjects, subject]
-        : prev.subjects.filter(s => s !== subject)
-    }))
   }
 
   if (loading) {
@@ -224,12 +259,12 @@ export default function TeacherProfilePage() {
     )
   }
 
-  if (!teacher) {
+  if (!parent) {
     return (
       <Layout>
         <div className="p-8">
           <div className="text-center py-8">
-            <p className="text-gray-600">Teacher profile not found</p>
+            <p className="text-gray-600">Parent profile not found</p>
           </div>
         </div>
       </Layout>
@@ -242,10 +277,10 @@ export default function TeacherProfilePage() {
         {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900">
-            Teacher Profile
+            Parent Profile
           </h1>
           <p className="text-gray-600 mt-2">
-            Manage your personal information and settings
+            Manage your personal information and view your children
           </p>
         </div>
 
@@ -271,9 +306,9 @@ export default function TeacherProfilePage() {
                 <div className="text-center">
                   <div className="relative inline-block">
                     <div className="w-32 h-32 rounded-full overflow-hidden bg-gray-100 border-4 border-white shadow-lg">
-                      {teacher.avatar_url ? (
+                      {parent.avatar_url ? (
                         <img 
-                          src={teacher.avatar_url} 
+                          src={parent.avatar_url} 
                           alt="Profile" 
                           className="w-full h-full object-cover"
                         />
@@ -306,7 +341,7 @@ export default function TeacherProfilePage() {
                         className="mt-1"
                       />
                     ) : (
-                      <p className="text-lg font-medium mt-1">{teacher.name}</p>
+                      <p className="text-lg font-medium mt-1">{parent.name}</p>
                     )}
                   </div>
 
@@ -321,7 +356,7 @@ export default function TeacherProfilePage() {
                         className="mt-1"
                       />
                     ) : (
-                      <p className="text-gray-600 mt-1">{teacher.email}</p>
+                      <p className="text-gray-600 mt-1">{parent.email}</p>
                     )}
                   </div>
 
@@ -336,7 +371,7 @@ export default function TeacherProfilePage() {
                         placeholder="Enter phone number"
                       />
                     ) : (
-                      <p className="text-gray-600 mt-1">{teacher.phone || 'Not provided'}</p>
+                      <p className="text-gray-600 mt-1">{parent.phone || 'Not provided'}</p>
                     )}
                   </div>
 
@@ -352,45 +387,14 @@ export default function TeacherProfilePage() {
                         placeholder="Tell us about yourself..."
                       />
                     ) : (
-                      <p className="text-gray-600 mt-1">{teacher.bio || 'No bio provided'}</p>
-                    )}
-                  </div>
-
-                  <div>
-                    <Label>Subjects</Label>
-                    {editMode ? (
-                      <div className="mt-2 space-y-2">
-                        {['Mathematics', 'Science', 'English', 'History', 'Geography', 'Art', 'Music', 'Physical Education'].map((subject) => (
-                          <label key={subject} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={editForm.subjects.includes(subject)}
-                              onChange={(e) => handleSubjectChange(subject, e.target.checked)}
-                              className="rounded border-gray-300"
-                            />
-                            <span className="text-sm">{subject}</span>
-                          </label>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {teacher.subjects && teacher.subjects.length > 0 ? (
-                          teacher.subjects.map((subject) => (
-                            <Badge key={subject} variant="secondary">
-                              {subject}
-                            </Badge>
-                          ))
-                        ) : (
-                          <p className="text-gray-500 text-sm">No subjects specified</p>
-                        )}
-                      </div>
+                      <p className="text-gray-600 mt-1">{parent.bio || 'No bio provided'}</p>
                     )}
                   </div>
 
                   <div>
                     <Label>Member Since</Label>
                     <p className="text-gray-600 mt-1">
-                      {teacher.created_at ? new Date(teacher.created_at).toLocaleDateString() : 'Unknown'}
+                      {parent.created_at ? new Date(parent.created_at).toLocaleDateString() : 'Unknown'}
                     </p>
                   </div>
 
@@ -415,7 +419,7 @@ export default function TeacherProfilePage() {
             </Card>
           </div>
 
-          {/* Stats and Quick Actions */}
+          {/* Children and Stats */}
           <div className="lg:col-span-2 space-y-6">
             {/* Quick Stats */}
             <div className="grid gap-4 md:grid-cols-3">
@@ -423,11 +427,11 @@ export default function TeacherProfilePage() {
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                      <BookOpen className="w-5 h-5 text-blue-600" />
+                      <Users className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
-                      <p className="text-sm text-gray-600">Classes</p>
+                      <p className="text-2xl font-bold">{parent.children?.length || 0}</p>
+                      <p className="text-sm text-gray-600">Children</p>
                     </div>
                   </div>
                 </CardContent>
@@ -440,8 +444,8 @@ export default function TeacherProfilePage() {
                       <GraduationCap className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
-                      <p className="text-sm text-gray-600">Students</p>
+                      <p className="text-2xl font-bold">{parent.children?.length || 0}</p>
+                      <p className="text-sm text-gray-600">Classes</p>
                     </div>
                   </div>
                 </CardContent>
@@ -455,12 +459,64 @@ export default function TeacherProfilePage() {
                     </div>
                     <div>
                       <p className="text-2xl font-bold">0</p>
-                      <p className="text-sm text-gray-600">Posts</p>
+                      <p className="text-sm text-gray-600">Messages</p>
                     </div>
                   </div>
                 </CardContent>
               </Card>
             </div>
+
+            {/* Children Section */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2">
+                  <Heart className="w-5 h-5" />
+                  <span>My Children</span>
+                </CardTitle>
+                <CardDescription>
+                  View your children and their classes
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {parent.children && parent.children.length > 0 ? (
+                  <div className="space-y-4">
+                    {parent.children.map((child) => (
+                      <div key={child.id} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h3 className="font-medium text-lg">{child.name}</h3>
+                            {child.class && (
+                              <p className="text-sm text-gray-600">
+                                Class: {child.class.name}
+                              </p>
+                            )}
+                            <p className="text-xs text-gray-500 mt-1">
+                              Joined: {child.created_at ? new Date(child.created_at).toLocaleDateString() : 'Unknown'}
+                            </p>
+                          </div>
+                          <div className="flex space-x-2">
+                            <Button size="sm" variant="outline">
+                              View Progress
+                            </Button>
+                            <Button size="sm" variant="outline">
+                              Messages
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-lg font-medium text-gray-900 mb-2">No Children Yet</h3>
+                    <p className="text-gray-600">
+                      Your children will appear here once they are added to classes by teachers.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Quick Actions */}
             <Card>
@@ -473,16 +529,16 @@ export default function TeacherProfilePage() {
               <CardContent>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
-                    <BookOpen className="w-6 h-6" />
-                    <span>Manage Classes</span>
-                  </Button>
-                  <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
                     <MessageSquare className="w-6 h-6" />
-                    <span>Create Post</span>
+                    <span>Send Message</span>
                   </Button>
                   <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
                     <GraduationCap className="w-6 h-6" />
-                    <span>View Students</span>
+                    <span>View Classes</span>
+                  </Button>
+                  <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
+                    <Users className="w-6 h-6" />
+                    <span>View Children</span>
                   </Button>
                   <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
                     <Settings className="w-6 h-6" />

@@ -360,11 +360,27 @@ export default function Navbar() {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                if (user?.role === 'teacher') {
+                  router.push('/teacher/profile')
+                } else if (user?.role === 'parent') {
+                  router.push('/parent/profile')
+                } else if (user?.role === 'admin') {
+                  router.push('/admin/profile')
+                }
+              }}>
                 <User className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </DropdownMenuItem>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={() => {
+                if (user?.role === 'teacher') {
+                  router.push('/teacher/settings')
+                } else if (user?.role === 'parent') {
+                  router.push('/parent/settings')
+                } else if (user?.role === 'admin') {
+                  router.push('/admin/settings')
+                }
+              }}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </DropdownMenuItem>
