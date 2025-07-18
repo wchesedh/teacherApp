@@ -29,12 +29,20 @@ export interface AuthUser {
   email: string
   role: UserRole
   name: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
 }
 
 // Database types based on your schema
 export interface Teacher {
   id: string
   name: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
   email: string
   password: string
   role: 'teacher'
@@ -50,12 +58,20 @@ export interface Class {
 export interface Student {
   id: string
   name: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
   class_id: string | null
 }
 
 export interface Parent {
   id: string
   name: string
+  first_name?: string
+  middle_name?: string
+  last_name?: string
+  suffix?: string
   email: string | null
   password?: string
   role: 'parent'

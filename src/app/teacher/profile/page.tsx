@@ -24,10 +24,14 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
+import { formatFullName } from '@/lib/utils'
 
 interface Teacher {
   id: string
-  name: string
+  first_name: string
+  middle_name?: string
+  last_name: string
+  suffix?: string
   email: string
   created_at?: string
   avatar_url?: string
@@ -43,8 +47,16 @@ export default function TeacherProfilePage() {
   const [editMode, setEditMode] = useState(false)
   const [showAvatarDialog, setShowAvatarDialog] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [stats, setStats] = useState({
+    classes: 0,
+    students: 0,
+    posts: 0
+  })
   const [editForm, setEditForm] = useState({
-    name: '',
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    suffix: '',
     email: '',
     bio: '',
     phone: '',
@@ -78,18 +90,68 @@ export default function TeacherProfilePage() {
 
       setTeacher(teacherData)
       setEditForm({
-        name: teacherData.name || '',
+        first_name: teacherData.first_name || '',
+        middle_name: teacherData.middle_name || '',
+        last_name: teacherData.last_name || '',
+        suffix: teacherData.suffix || '',
         email: teacherData.email || '',
         bio: teacherData.bio || '',
         phone: teacherData.phone || '',
         subjects: teacherData.subjects || []
       })
 
+      // Fetch stats
+      await fetchTeacherStats()
+
     } catch (error) {
       console.error('Error fetching teacher profile:', error)
       toast.error('Error fetching teacher profile')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchTeacherStats = async () => {
+    if (!user) return
+
+    try {
+      // Fetch classes count for this teacher
+      const { count: classesCount, error: classesError } = await supabase
+        .from('classes')
+        .select('*', { count: 'exact', head: true })
+        .eq('teacher_id', user.id)
+
+      // Fetch students count for this teacher's classes
+      const { count: studentsCount, error: studentsError } = await supabase
+        .from('students')
+        .select('*', { count: 'exact', head: true })
+        .in('class_id', 
+          (await supabase
+            .from('classes')
+            .select('id')
+            .eq('teacher_id', user.id)
+          ).data?.map(c => c.id) || []
+        )
+
+      // Fetch posts count for this teacher
+      const { count: postsCount, error: postsError } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('teacher_id', user.id)
+
+      setStats({
+        classes: classesCount || 0,
+        students: studentsCount || 0,
+        posts: postsCount || 0
+      })
+
+      // Log any errors for debugging
+      if (classesError) console.error('Error fetching classes count:', classesError)
+      if (studentsError) console.error('Error fetching students count:', studentsError)
+      if (postsError) console.error('Error fetching posts count:', postsError)
+
+    } catch (error) {
+      console.error('Error fetching teacher stats:', error)
     }
   }
 
@@ -176,7 +238,10 @@ export default function TeacherProfilePage() {
       const { error } = await supabase
         .from('teachers')
         .update({
-          name: editForm.name,
+          first_name: editForm.first_name,
+          middle_name: editForm.middle_name,
+          last_name: editForm.last_name,
+          suffix: editForm.suffix,
           email: editForm.email,
           bio: editForm.bio,
           phone: editForm.phone,
@@ -296,19 +361,63 @@ export default function TeacherProfilePage() {
 
                 {/* Profile Information */}
                 <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Full Name</Label>
-                    {editMode ? (
-                      <Input
-                        id="name"
-                        value={editForm.name}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="mt-1"
-                      />
-                    ) : (
-                      <p className="text-lg font-medium mt-1">{teacher.name}</p>
-                    )}
-                  </div>
+                  {editMode && (
+                    <>
+                      <div>
+                        <Label htmlFor="first_name">First Name</Label>
+                        <Input
+                          id="first_name"
+                          value={editForm.first_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter first name"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="middle_name">Middle Name</Label>
+                        <Input
+                          id="middle_name"
+                          value={editForm.middle_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter middle name (optional)"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="last_name">Last Name</Label>
+                        <Input
+                          id="last_name"
+                          value={editForm.last_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter last name"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="suffix">Suffix</Label>
+                        <Input
+                          id="suffix"
+                          value={editForm.suffix}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, suffix: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter suffix (e.g., Jr., Sr., III) (optional)"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Display full name when not in edit mode */}
+                  {!editMode && (
+                    <div>
+                      <Label>Full Name</Label>
+                      <p className="text-xl font-semibold mt-1 text-gray-900">
+                        {formatFullName(teacher.first_name, teacher.last_name, teacher.middle_name, teacher.suffix)}
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="email">Email</Label>
@@ -426,7 +535,7 @@ export default function TeacherProfilePage() {
                       <BookOpen className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
+                      <p className="text-2xl font-bold">{stats.classes}</p>
                       <p className="text-sm text-gray-600">Classes</p>
                     </div>
                   </div>
@@ -440,7 +549,7 @@ export default function TeacherProfilePage() {
                       <GraduationCap className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
+                      <p className="text-2xl font-bold">{stats.students}</p>
                       <p className="text-sm text-gray-600">Students</p>
                     </div>
                   </div>
@@ -454,7 +563,7 @@ export default function TeacherProfilePage() {
                       <MessageSquare className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
+                      <p className="text-2xl font-bold">{stats.posts}</p>
                       <p className="text-sm text-gray-600">Posts</p>
                     </div>
                   </div>

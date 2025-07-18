@@ -24,6 +24,7 @@ import {
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
+import { getDisplayName } from '@/lib/utils'
 
 interface Notification {
   id: string
@@ -340,7 +341,7 @@ export default function Navbar() {
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-medium text-gray-900">
-                    {user?.name}
+                    {getDisplayName(user?.first_name, user?.last_name, user?.middle_name, user?.suffix, user?.name)}
                   </p>
                   <p className="text-xs text-gray-500 capitalize">
                     {user?.role}

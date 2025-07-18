@@ -25,10 +25,14 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
+import { formatFullName } from '@/lib/utils'
 
 interface Parent {
   id: string
-  name: string
+  first_name: string
+  middle_name?: string
+  last_name: string
+  suffix?: string
   email: string
   created_at?: string
   avatar_url?: string
@@ -59,8 +63,16 @@ export default function ParentProfilePage() {
   const [editMode, setEditMode] = useState(false)
   const [showAvatarDialog, setShowAvatarDialog] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [stats, setStats] = useState({
+    children: 0,
+    classes: 0,
+    messages: 0
+  })
   const [editForm, setEditForm] = useState({
-    name: '',
+    first_name: '',
+    middle_name: '',
+    last_name: '',
+    suffix: '',
     email: '',
     bio: '',
     phone: ''
@@ -124,17 +136,41 @@ export default function ParentProfilePage() {
 
       setParent(parentWithChildren)
       setEditForm({
-        name: parentData.name || '',
+        first_name: parentData.first_name || '',
+        middle_name: parentData.middle_name || '',
+        last_name: parentData.last_name || '',
+        suffix: parentData.suffix || '',
         email: parentData.email || '',
         bio: parentData.bio || '',
         phone: parentData.phone || ''
       })
+
+      // Fetch stats
+      await fetchParentStats()
 
     } catch (error) {
       console.error('Error fetching parent profile:', error)
       toast.error('Error fetching parent profile')
     } finally {
       setLoading(false)
+    }
+  }
+
+  const fetchParentStats = async () => {
+    if (!user) return
+
+    try {
+      // Get unique classes from children
+      const uniqueClasses = new Set(parent?.children?.map(child => child.class_id) || [])
+      
+      setStats({
+        children: parent?.children?.length || 0,
+        classes: uniqueClasses.size,
+        messages: 0 // Placeholder for future message count
+      })
+
+    } catch (error) {
+      console.error('Error fetching parent stats:', error)
     }
   }
 
@@ -221,7 +257,10 @@ export default function ParentProfilePage() {
       const { error } = await supabase
         .from('parents')
         .update({
-          name: editForm.name,
+          first_name: editForm.first_name,
+          middle_name: editForm.middle_name,
+          last_name: editForm.last_name,
+          suffix: editForm.suffix,
           email: editForm.email,
           bio: editForm.bio,
           phone: editForm.phone
@@ -331,19 +370,63 @@ export default function ParentProfilePage() {
 
                 {/* Profile Information */}
                 <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="name">Full Name</Label>
-                    {editMode ? (
-                      <Input
-                        id="name"
-                        value={editForm.name}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
-                        className="mt-1"
-                      />
-                    ) : (
-                      <p className="text-lg font-medium mt-1">{parent.name}</p>
-                    )}
-                  </div>
+                  {editMode && (
+                    <>
+                      <div>
+                        <Label htmlFor="first_name">First Name</Label>
+                        <Input
+                          id="first_name"
+                          value={editForm.first_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter first name"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="middle_name">Middle Name</Label>
+                        <Input
+                          id="middle_name"
+                          value={editForm.middle_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter middle name (optional)"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="last_name">Last Name</Label>
+                        <Input
+                          id="last_name"
+                          value={editForm.last_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter last name"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="suffix">Suffix</Label>
+                        <Input
+                          id="suffix"
+                          value={editForm.suffix}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, suffix: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter suffix (e.g., Jr., Sr., III) (optional)"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {/* Display full name when not in edit mode */}
+                  {!editMode && (
+                    <div>
+                      <Label>Full Name</Label>
+                      <p className="text-xl font-semibold mt-1 text-gray-900">
+                        {formatFullName(parent.first_name, parent.last_name, parent.middle_name, parent.suffix)}
+                      </p>
+                    </div>
+                  )}
 
                   <div>
                     <Label htmlFor="email">Email</Label>
@@ -430,7 +513,7 @@ export default function ParentProfilePage() {
                       <Users className="w-5 h-5 text-blue-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{parent.children?.length || 0}</p>
+                      <p className="text-2xl font-bold">{stats.children}</p>
                       <p className="text-sm text-gray-600">Children</p>
                     </div>
                   </div>
@@ -444,7 +527,7 @@ export default function ParentProfilePage() {
                       <GraduationCap className="w-5 h-5 text-green-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{parent.children?.length || 0}</p>
+                      <p className="text-2xl font-bold">{stats.classes}</p>
                       <p className="text-sm text-gray-600">Classes</p>
                     </div>
                   </div>
@@ -458,7 +541,7 @@ export default function ParentProfilePage() {
                       <MessageSquare className="w-5 h-5 text-purple-600" />
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">0</p>
+                      <p className="text-2xl font-bold">{stats.messages}</p>
                       <p className="text-sm text-gray-600">Messages</p>
                     </div>
                   </div>
