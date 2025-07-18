@@ -405,7 +405,7 @@ export default function TeacherProfilePage() {
                           className="mt-1"
                           placeholder="Enter suffix (e.g., Jr., Sr., III) (optional)"
                         />
-                      </div>
+                    </div>
                     </>
                   )}
 
@@ -433,7 +433,7 @@ export default function TeacherProfilePage() {
                       <p className="text-gray-600 mt-1">{teacher.email}</p>
                     )}
                   </div>
-
+                  
                   <div>
                     <Label htmlFor="phone">Phone Number</Label>
                     {editMode ? (
@@ -464,7 +464,7 @@ export default function TeacherProfilePage() {
                       <p className="text-gray-600 mt-1">{teacher.bio || 'No bio provided'}</p>
                     )}
                   </div>
-
+                  
                   <div>
                     <Label>Subjects</Label>
                     {editMode ? (
@@ -492,17 +492,17 @@ export default function TeacherProfilePage() {
                         ) : (
                           <p className="text-gray-500 text-sm">No subjects specified</p>
                         )}
-                      </div>
+                    </div>
                     )}
                   </div>
-
+                  
                   <div>
                     <Label>Member Since</Label>
                     <p className="text-gray-600 mt-1">
                       {teacher.created_at ? new Date(teacher.created_at).toLocaleDateString() : 'Unknown'}
                     </p>
                   </div>
-
+                  
                   {editMode && (
                     <div className="flex space-x-2 pt-4">
                       <Button onClick={handleSaveProfile} className="flex-1">
@@ -528,17 +528,17 @@ export default function TeacherProfilePage() {
           <div className="lg:col-span-2 space-y-6">
             {/* Quick Stats */}
             <div className="grid gap-4 md:grid-cols-3">
-              <Card>
+                <Card>
                 <CardContent className="p-4">
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
                       <BookOpen className="w-5 h-5 text-blue-600" />
-                    </div>
-                    <div>
+                      </div>
+                                <div>
                       <p className="text-2xl font-bold">{stats.classes}</p>
                       <p className="text-sm text-gray-600">Classes</p>
-                    </div>
-                  </div>
+                                </div>
+                              </div>
                 </CardContent>
               </Card>
 
@@ -547,12 +547,12 @@ export default function TeacherProfilePage() {
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-green-100 rounded-full flex items-center justify-center">
                       <GraduationCap className="w-5 h-5 text-green-600" />
-                    </div>
-                    <div>
+                            </div>
+                                          <div>
                       <p className="text-2xl font-bold">{stats.students}</p>
                       <p className="text-sm text-gray-600">Students</p>
-                    </div>
-                  </div>
+                                          </div>
+                                        </div>
                 </CardContent>
               </Card>
 
@@ -561,25 +561,25 @@ export default function TeacherProfilePage() {
                   <div className="flex items-center space-x-3">
                     <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
                       <MessageSquare className="w-5 h-5 text-purple-600" />
-                    </div>
+                                      </div>
                     <div>
                       <p className="text-2xl font-bold">{stats.posts}</p>
                       <p className="text-sm text-gray-600">Posts</p>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
+                          </div>
+                      </div>
+                  </CardContent>
+                </Card>
             </div>
 
             {/* Quick Actions */}
-            <Card>
-              <CardHeader>
+                <Card>
+                  <CardHeader>
                 <CardTitle>Quick Actions</CardTitle>
-                <CardDescription>
+                    <CardDescription>
                   Common tasks and shortcuts
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
+                    </CardDescription>
+                  </CardHeader>
+                  <CardContent>
                 <div className="grid gap-4 md:grid-cols-2">
                   <Button variant="outline" className="h-auto p-4 flex-col space-y-2">
                     <BookOpen className="w-6 h-6" />
@@ -597,9 +597,9 @@ export default function TeacherProfilePage() {
                     <Settings className="w-6 h-6" />
                     <span>Account Settings</span>
                   </Button>
-                </div>
-              </CardContent>
-            </Card>
+                      </div>
+                  </CardContent>
+                </Card>
           </div>
         </div>
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAuth } from '@/contexts/AuthContext'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
@@ -16,6 +16,8 @@ import {
   User
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
+import { getDisplayName } from '@/lib/utils'
 
 interface SidebarProps {
   className?: string
@@ -24,6 +26,53 @@ interface SidebarProps {
 export default function Sidebar({ className }: SidebarProps) {
   const { user, signOut } = useAuth()
   const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard'])
+  const [userProfile, setUserProfile] = useState<{
+    avatar_url?: string
+    first_name?: string
+    middle_name?: string
+    last_name?: string
+    suffix?: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (user) {
+      fetchUserProfile()
+    }
+  }, [user])
+
+  const fetchUserProfile = async () => {
+    if (!user) return
+
+    try {
+      let profileData = null
+
+      if (user.role === 'teacher') {
+        const { data, error } = await supabase
+          .from('teachers')
+          .select('avatar_url, first_name, middle_name, last_name, suffix')
+          .eq('id', user.id)
+          .single()
+
+        if (!error && data) {
+          profileData = data
+        }
+      } else if (user.role === 'parent') {
+        const { data, error } = await supabase
+          .from('parents')
+          .select('avatar_url, first_name, middle_name, last_name, suffix')
+          .eq('id', user.id)
+          .single()
+
+        if (!error && data) {
+          profileData = data
+        }
+      }
+
+      setUserProfile(profileData)
+    } catch (error) {
+      console.error('Error fetching user profile:', error)
+    }
+  }
 
   const toggleSection = (section: string) => {
     setExpandedSections(prev => 
@@ -167,12 +216,26 @@ export default function Sidebar({ className }: SidebarProps) {
         <Card>
           <CardContent className="p-3">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gray-200 rounded-full flex items-center justify-center">
-                <User className="w-5 h-5 text-gray-600" />
+              <div className="w-10 h-10 rounded-full overflow-hidden bg-gray-200 flex items-center justify-center">
+                {userProfile?.avatar_url ? (
+                  <img 
+                    src={userProfile.avatar_url} 
+                    alt="Profile" 
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-5 h-5 text-gray-600" />
+                )}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-gray-900 truncate">
-                  {user?.name}
+                  {getDisplayName(
+                    userProfile?.first_name || user?.first_name, 
+                    userProfile?.last_name || user?.last_name, 
+                    userProfile?.middle_name || user?.middle_name, 
+                    userProfile?.suffix || user?.suffix, 
+                    user?.name
+                  )}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {user?.email}

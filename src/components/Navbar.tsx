@@ -42,10 +42,18 @@ export default function Navbar() {
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [showNotifications, setShowNotifications] = useState(false)
+  const [userProfile, setUserProfile] = useState<{
+    avatar_url?: string
+    first_name?: string
+    middle_name?: string
+    last_name?: string
+    suffix?: string
+  } | null>(null)
 
   useEffect(() => {
     if (user) {
       fetchNotifications()
+      fetchUserProfile()
     }
   }, [user])
 
@@ -215,6 +223,40 @@ export default function Navbar() {
     }
   }
 
+  const fetchUserProfile = async () => {
+    if (!user) return
+
+    try {
+      let profileData = null
+
+      if (user.role === 'teacher') {
+        const { data, error } = await supabase
+          .from('teachers')
+          .select('avatar_url, first_name, middle_name, last_name, suffix')
+          .eq('id', user.id)
+          .single()
+
+        if (!error && data) {
+          profileData = data
+        }
+      } else if (user.role === 'parent') {
+        const { data, error } = await supabase
+          .from('parents')
+          .select('avatar_url, first_name, middle_name, last_name, suffix')
+          .eq('id', user.id)
+          .single()
+
+        if (!error && data) {
+          profileData = data
+        }
+      }
+
+      setUserProfile(profileData)
+    } catch (error) {
+      console.error('Error fetching user profile:', error)
+    }
+  }
+
   const handleNotificationClick = (notification: Notification) => {
     // Mark as read
     setNotifications(prev => 
@@ -336,12 +378,26 @@ export default function Navbar() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                  <User className="w-4 h-4 text-blue-600" />
+                <div className="w-8 h-8 rounded-full overflow-hidden bg-blue-100 flex items-center justify-center">
+                  {userProfile?.avatar_url ? (
+                    <img 
+                      src={userProfile.avatar_url} 
+                      alt="Profile" 
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-4 h-4 text-blue-600" />
+                  )}
                 </div>
                 <div className="hidden md:block text-left">
                   <p className="text-sm font-medium text-gray-900">
-                    {getDisplayName(user?.first_name, user?.last_name, user?.middle_name, user?.suffix, user?.name)}
+                    {getDisplayName(
+                      userProfile?.first_name || user?.first_name, 
+                      userProfile?.last_name || user?.last_name, 
+                      userProfile?.middle_name || user?.middle_name, 
+                      userProfile?.suffix || user?.suffix, 
+                      user?.name
+                    )}
                   </p>
                   <p className="text-xs text-gray-500 capitalize">
                     {user?.role}
@@ -351,13 +407,32 @@ export default function Navbar() {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-56">
               <DropdownMenuLabel>
-                <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium leading-none">
-                    {user?.name}
-                  </p>
-                  <p className="text-xs leading-none text-muted-foreground">
-                    {user?.email}
-                  </p>
+                <div className="flex items-center space-x-3">
+                  <div className="w-10 h-10 rounded-full overflow-hidden bg-blue-100 flex items-center justify-center">
+                    {userProfile?.avatar_url ? (
+                      <img 
+                        src={userProfile.avatar_url} 
+                        alt="Profile" 
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <User className="w-5 h-5 text-blue-600" />
+                    )}
+                  </div>
+                  <div className="flex flex-col space-y-1">
+                    <p className="text-sm font-medium leading-none">
+                      {getDisplayName(
+                        userProfile?.first_name || user?.first_name, 
+                        userProfile?.last_name || user?.last_name, 
+                        userProfile?.middle_name || user?.middle_name, 
+                        userProfile?.suffix || user?.suffix, 
+                        user?.name
+                      )}
+                    </p>
+                    <p className="text-xs leading-none text-muted-foreground">
+                      {user?.email}
+                    </p>
+                  </div>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
