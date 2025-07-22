@@ -32,7 +32,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { formatFullName } from '@/lib/utils'
+import { formatFullName, getDisplayName } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -40,6 +40,7 @@ interface Student {
   middle_name?: string
   last_name: string
   suffix?: string
+  name?: string
   class_id: string
   created_at: string
   avatar_url?: string
@@ -574,7 +575,7 @@ export default function ParentStudentProfilePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                Student Profile
+                {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s Profile
               </h1>
               <p className="text-gray-600 mt-2">
                 View and manage your child's information
@@ -683,7 +684,7 @@ export default function ParentStudentProfilePage() {
                     <div>
                       <Label>Full Name</Label>
                       <p className="text-xl font-semibold mt-1 text-gray-900">
-                        {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}
+                        {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}
                       </p>
                     </div>
                   )}
@@ -830,12 +831,13 @@ export default function ParentStudentProfilePage() {
                       <div>
                         <Label>Teacher</Label>
                         <p className="text-lg font-medium mt-1">
-                          {formatFullName(
+                          {getDisplayName(
                             classInfo.teacher.first_name || '',
                             classInfo.teacher.last_name || '',
                             classInfo.teacher.middle_name,
-                            classInfo.teacher.suffix
-                          ) || classInfo.teacher.name}
+                            classInfo.teacher.suffix,
+                            classInfo.teacher.name
+                          )}
                         </p>
                         <p className="text-sm text-gray-600 mt-1">{classInfo.teacher.email}</p>
                       </div>
@@ -865,12 +867,13 @@ export default function ParentStudentProfilePage() {
                           <div className="flex items-center space-x-2">
                             {post.teacher && (
                               <span className="text-sm text-purple-600 bg-purple-100 px-2">
-                                {formatFullName(
+                                {getDisplayName(
                                   post.teacher.first_name || '',
                                   post.teacher.last_name || '',
                                   post.teacher.middle_name,
-                                  post.teacher.suffix
-                                ) || post.teacher.name}
+                                  post.teacher.suffix,
+                                  post.teacher.name
+                                )}
                               </span>
                             )}
                             <span className="text-sm text-gray-500">

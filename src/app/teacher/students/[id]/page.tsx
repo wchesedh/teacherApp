@@ -35,7 +35,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { formatFullName } from '@/lib/utils'
+import { formatFullName, getDisplayName } from '@/lib/utils'
 
 interface Student {
   id: string
@@ -43,6 +43,7 @@ interface Student {
   middle_name?: string
   last_name: string
   suffix?: string
+  name?: string
   class_id: string
   created_at: string
   avatar_url?: string
@@ -615,7 +616,7 @@ export default function StudentProfilePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s Profile
+                {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s Profile
               </h1>
               <p className="text-gray-600 mt-2">
                 Student details and progress updates
@@ -767,7 +768,7 @@ export default function StudentProfilePage() {
                       </div>
                     ) : (
                       <div>
-                        <h3 className="text-lg font-semibold">{formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}</h3>
+                        <h3 className="text-lg font-semibold">{getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}</h3>
                         <p className="text-sm text-gray-600">Student</p>
                         {student.bio && (
                           <p className="text-sm text-gray-500 mt-1">{student.bio}</p>
@@ -848,7 +849,7 @@ export default function StudentProfilePage() {
                       <span>Progress Updates</span>
                     </CardTitle>
                     <CardDescription>
-                      Posts about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress
+                      Posts about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress
                     </CardDescription>
                   </div>
                   <Button onClick={() => setIsCreatePostOpen(true)}>
@@ -863,7 +864,7 @@ export default function StudentProfilePage() {
                     <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Posts Yet</h3>
                     <p className="text-gray-600 mb-4">
-                      Start sharing updates about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress with their parents.
+                      Start sharing updates about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress with their parents.
                     </p>
                     <Button onClick={() => setIsCreatePostOpen(true)}>
                       <MessageSquare className="w-4 h-4 mr-2" />
@@ -987,9 +988,9 @@ export default function StudentProfilePage() {
         <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Post About {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}</DialogTitle>
+              <DialogTitle>Create Post About {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}</DialogTitle>
               <DialogDescription>
-                Share updates about {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}'s progress with their parents
+                Share updates about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress with their parents
               </DialogDescription>
             </DialogHeader>
             <CreatePostForm 
