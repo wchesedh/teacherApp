@@ -152,50 +152,154 @@ export default function StudentProfilePage({
     const currentStudent = studentData || student
     const currentClassInfo = classData || classInfo
     
-    if (!currentStudent || !currentClassInfo) return
+    console.log('fetchStudentStats called with:', {
+      currentStudent: currentStudent?.id,
+      currentClassInfo: currentClassInfo?.id,
+      studentData: studentData?.id,
+      classData: classData?.id
+    })
+    
+    if (!currentStudent || !currentClassInfo) {
+      console.log('Missing student or class info:', { currentStudent: !!currentStudent, currentClassInfo: !!currentClassInfo })
+      return
+    }
 
     try {
       // Count posts for this student in this specific class
-      const { count: postsCount, error: postsError } = await supabase
-        .from('posts')
-        .select('*', { count: 'exact', head: true })
-        .eq('teacher_id', user?.id)
-        .eq('class_id', currentClassInfo.id)
+      let postsCount = 0
+      let postsError = null
+      
+      if (currentClassInfo?.id) {
+        try {
+          // Get all posts for this class by this teacher
+          const { data: classPosts, error: classPostsError } = await supabase
+            .from('posts')
+            .select('id')
+            .eq('class_id', currentClassInfo.id)
+            .eq('teacher_id', user?.id)
+
+          if (classPostsError) {
+            console.error('Error fetching class posts:', classPostsError)
+            postsCount = 0
+            postsError = classPostsError
+          } else {
+            // Get post IDs for this class
+            const classPostIds = classPosts?.map(post => post.id) || []
+            console.log('Class post IDs:', classPostIds)
+
+            if (classPostIds.length > 0) {
+              // Count posts tagged to this student
+              const { count, error } = await supabase
+                .from('post_student_tags')
+                .select('*', { count: 'exact', head: true })
+                .eq('student_id', currentStudent.id)
+                .in('post_id', classPostIds)
+              
+              postsCount = count || 0
+              postsError = error
+              console.log('Posts count query result:', { count, error, classPostIds })
+            } else {
+              postsCount = 0
+              console.log('No posts found for this class')
+            }
+          }
+        } catch (error) {
+          console.error('Error counting posts for student in class:', currentStudent.id, currentClassInfo.id, error)
+          postsCount = 0
+          postsError = error
+        }
+      } else {
+        console.log('No class selected, setting posts count to 0')
+      }
 
       // Count classmates (students in the same class)
       let classmatesCount = 0
-      const { count: classmatesCountResult, error: classmatesError } = await supabase
-        .from('student_class')
-        .select('*', { count: 'exact', head: true })
-        .eq('class_id', currentClassInfo.id)
-
-      if (classmatesError) {
-        // Fallback to old method if student_class table doesn't exist
-        const { count: fallbackCount } = await supabase
-          .from('students')
-          .select('*', { count: 'exact', head: true })
-          .eq('class_id', currentStudent.class_id)
-        classmatesCount = fallbackCount || 0
+      let classmatesError = null
+      
+      if (currentClassInfo?.id) {
+        try {
+          // Simple count of students in this class
+          const { count, error } = await supabase
+            .from('student_class')
+            .select('*', { count: 'exact', head: true })
+            .eq('class_id', currentClassInfo.id)
+          
+          if (error) {
+            console.error('Error fetching classmates:', error)
+            classmatesCount = 0
+            classmatesError = error
+          } else {
+            // Subtract 1 to exclude the current student
+            classmatesCount = Math.max((count || 0) - 1, 0)
+            console.log('Classmates count result:', { count, classmatesCount })
+          }
+        } catch (error) {
+          console.error('Error counting classmates:', error)
+          classmatesCount = 0
+          classmatesError = error
+        }
       } else {
-        classmatesCount = classmatesCountResult || 0
+        console.log('No class selected, setting classmates count to 0')
       }
 
       // Count teachers for this student's class
       let teachersCount = 0
-      const { data: classData } = await supabase
-        .from('classes')
-        .select('teacher_id')
-        .eq('id', currentClassInfo.id)
-        .not('teacher_id', 'is', null)
-        .single()
+      let teachersError = null
       
-      teachersCount = classData?.teacher_id ? 1 : 0
+      if (currentClassInfo?.id) {
+        try {
+          // Simple check if class has a teacher
+          const { data: classData, error } = await supabase
+            .from('classes')
+            .select('teacher_id')
+            .eq('id', currentClassInfo.id)
+            .single()
+          
+          teachersCount = classData?.teacher_id ? 1 : 0
+          teachersError = error
+          console.log('Teachers count result:', { classData, teachersCount })
+        } catch (error) {
+          console.error('Error counting teachers:', error)
+          teachersCount = 0
+          teachersError = error
+        }
+      } else {
+        console.log('No class selected, setting teachers count to 0')
+      }
 
-      setStats({
+      const finalStats = {
         posts: postsCount || 0,
         teachers: teachersCount || 0,
         classmates: classmatesCount || 0
-      })
+      }
+      console.log('Setting final stats:', finalStats)
+      setStats(finalStats)
+
+      // Log any errors for debugging
+      if (postsError) {
+        console.error('Error fetching posts count:', postsError)
+        console.error('Posts error details:', {
+          studentId: currentStudent.id,
+          classId: currentClassInfo?.id,
+          error: postsError
+        })
+      }
+      if (classmatesError) {
+        console.error('Error fetching classmates count:', classmatesError)
+        console.error('Classmates error details:', {
+          studentId: currentStudent.id,
+          classId: currentClassInfo?.id,
+          error: classmatesError
+        })
+      }
+      if (teachersError) {
+        console.error('Error fetching teachers count:', teachersError)
+        console.error('Teachers error details:', {
+          studentId: currentStudent.id,
+          classId: currentClassInfo?.id,
+          error: teachersError
+        })
+      }
 
     } catch (error) {
       console.error('Error fetching student stats:', error)
