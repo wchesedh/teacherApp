@@ -967,52 +967,89 @@ export default function TeacherDashboard() {
         )}
 
         {/* Classes Management */}
-        <Card>
-          <CardHeader>
+        <Card className="overflow-hidden">
+          <CardHeader className="bg-gradient-to-r from-blue-50 to-indigo-50 border-b">
             <div className="flex justify-between items-center">
               <div>
-                <CardTitle>My Classes</CardTitle>
-                <CardDescription>
-                  Manage your classes and their students ({classes.length} classes)
+                <CardTitle className="flex items-center space-x-2 text-gray-900">
+                  <BookOpen className="w-5 h-5 text-blue-600" />
+                  <span>My Classes</span>
+                </CardTitle>
+                <CardDescription className="text-gray-600">
+                  Manage your classes and their students • {classes.length} class{classes.length !== 1 ? 'es' : ''}
                 </CardDescription>
               </div>
-              <Button onClick={() => setIsAddClassOpen(true)}>
+              <Button 
+                onClick={() => setIsAddClassOpen(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white shadow-sm"
+              >
                 <Plus className="mr-2 h-4 w-4" />
                 Add Class
               </Button>
             </div>
           </CardHeader>
-          <CardContent>
+          <CardContent className="p-0">
             {loading ? (
-              <div className="text-center py-8">Loading classes...</div>
+              <div className="flex items-center justify-center py-12">
+                <div className="flex items-center space-x-2 text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Loading classes...</span>
+                </div>
+              </div>
             ) : classes.length === 0 ? (
-              <div className="text-center py-8 text-gray-500">
-                No classes yet. Create your first class to get started.
+              <div className="text-center py-12">
+                <BookOpen className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No classes yet</h3>
+                <p className="text-gray-500 mb-4">Create your first class to get started managing students and communicating with parents.</p>
+                <Button 
+                  onClick={() => setIsAddClassOpen(true)}
+                  className="bg-blue-600 hover:bg-blue-700 text-white"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  Create Your First Class
+                </Button>
               </div>
             ) : (
-              <div className="space-y-4">
-                {classes.map((classItem) => (
-                  <div key={classItem.id} className="border rounded-lg">
-                    <div className="flex items-center justify-between p-4">
+              <div className="divide-y divide-gray-100">
+                {classes.map((classItem, index) => (
+                  <div key={classItem.id} className="group hover:bg-gray-50 transition-colors">
+                    <div className="flex items-center justify-between p-6">
                       <div 
-                        className="flex items-center space-x-3 cursor-pointer hover:bg-gray-50 p-2 rounded flex-1"
+                        className="flex items-center space-x-4 cursor-pointer flex-1"
                         onClick={() => toggleClassExpansion(classItem.id)}
                       >
-                        {expandedClasses.includes(classItem.id) ? (
-                          <ChevronDown className="h-4 w-4 text-gray-500" />
-                        ) : (
-                          <ChevronRight className="h-4 w-4 text-gray-500" />
-                        )}
-                        <div>
-                          <h3 className="font-medium">{classItem.name}</h3>
-                          <p className="text-sm text-gray-500">
-                            {classItem.students?.length || 0} students
-                          </p>
+                        <div className="flex-shrink-0">
+                          <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center text-white font-semibold">
+                            {classItem.name.charAt(0).toUpperCase()}
+                          </div>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-lg font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">
+                            {classItem.name}
+                          </h3>
+                          <div className="flex items-center space-x-4 mt-1">
+                            <div className="flex items-center space-x-1 text-sm text-gray-500">
+                              <Users className="w-4 h-4" />
+                              <span>{classItem.students?.length || 0} student{(classItem.students?.length || 0) !== 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="flex items-center space-x-1 text-sm text-gray-500">
+                              <BookOpen className="w-4 h-4" />
+                              <span>Created {new Date(classItem.created_at).toLocaleDateString()}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex-shrink-0">
+                          {expandedClasses.includes(classItem.id) ? (
+                            <ChevronDown className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                          ) : (
+                            <ChevronRight className="h-5 w-5 text-gray-400 group-hover:text-blue-600 transition-colors" />
+                          )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 ml-4">
                         <Link href={`/teacher/classes/${classItem.id}/posts`}>
-                          <Button size="sm" variant="outline">
+                          <Button size="sm" variant="outline" className="border-blue-200 text-blue-700 hover:bg-blue-50">
+                            <MessageSquare className="mr-2 h-3 w-3" />
                             Announcements
                           </Button>
                         </Link>
@@ -1023,9 +1060,10 @@ export default function TeacherDashboard() {
                             setSelectedClassForStudent(classItem.id)
                             setIsManageStudentsOpen(true)
                           }}
+                          className="border-green-200 text-green-700 hover:bg-green-50"
                         >
                           <Users className="mr-2 h-3 w-3" />
-                          Manage Students
+                          Manage
                         </Button>
                         <Button 
                           size="sm" 
@@ -1034,6 +1072,7 @@ export default function TeacherDashboard() {
                             setSelectedClassForStudent(classItem.id)
                             setIsAddStudentOpen(true)
                           }}
+                          className="border-purple-200 text-purple-700 hover:bg-purple-50"
                         >
                           <Plus className="mr-2 h-3 w-3" />
                           Add Student
@@ -1042,63 +1081,92 @@ export default function TeacherDashboard() {
                     </div>
                     
                     {expandedClasses.includes(classItem.id) && (
-                      <div className="border-t bg-gray-50 p-4">
-                        {classItem.students && classItem.students.length > 0 ? (
-                          <div className="space-y-3">
-                                                         {classItem.students.map((student) => (
-                               <div key={student.id} className="bg-white p-3 rounded border">
-                                 <div className="flex items-center justify-between">
-                                   <div>
-                                     <h4 className="font-medium">{student.name}</h4>
-                                     <div className="text-sm text-gray-500 mt-1">
-                                       {student.id_number && (
-                                         <Badge variant="default" className="mr-2 mb-1">
-                                           ID: {student.id_number}
-                                         </Badge>
-                                       )}
-                                       {student.parents && student.parents.length > 0 ? (
-                                         <span>
-                                           {student.parents.length === 1 ? 'Parent' : 'Parents'}: {student.parents.map(p => p.name).join(', ')}
-                                         </span>
-                                       ) : (
-                                         <span className="text-gray-400">No parents assigned</span>
-                                       )}
-                                     </div>
-                                   </div>
-                                                                      <div className="flex gap-2">
-                                     <Link href={`/teacher/students/${student.id}?classId=${classItem.id}`}>
-                                       <Button size="sm" variant="outline">
-                                         <Eye className="w-4 h-4 mr-1" />
-                                         View Details
-                                       </Button>
-                                     </Link>
-                                     <Button size="sm" variant="outline" onClick={() => handleRemoveFromClass(student.id, classItem.id)}>
-                                       <Users className="w-4 h-4 mr-1" />
-                                       Remove from Class
-                                     </Button>
-                                     <DropdownMenu>
-                                       <DropdownMenuTrigger asChild>
-                                         <Button size="sm" variant="outline">
-                                           <MoreHorizontal className="w-4 h-4" />
+                      <div className="bg-gray-50 border-t border-gray-100">
+                        <div className="p-6">
+                          <div className="flex items-center justify-between mb-4">
+                            <h4 className="text-sm font-medium text-gray-700 uppercase tracking-wide">
+                              Students in {classItem.name}
+                            </h4>
+                            <span className="text-xs text-gray-500">
+                              {classItem.students?.length || 0} total
+                            </span>
+                          </div>
+                          
+                          {classItem.students && classItem.students.length > 0 ? (
+                            <div className="grid gap-3">
+                              {classItem.students.map((student) => (
+                                <div key={student.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center space-x-3 flex-1">
+                                      <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                        {student.name.charAt(0).toUpperCase()}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <h5 className="font-medium text-gray-900 truncate">{student.name}</h5>
+                                        <div className="flex items-center space-x-2 mt-1">
+                                          {student.id_number && (
+                                            <Badge variant="secondary" className="text-xs">
+                                              ID: {student.id_number}
+                                            </Badge>
+                                          )}
+                                                                                     {student.parents && student.parents.length > 0 ? (
+                                             <div className="flex items-center space-x-1 text-xs text-gray-500">
+                                               <Users className="w-3 h-3" />
+                                               <span>{student.parents.map(p => p.name).join(', ')}</span>
+                                             </div>
+                                           ) : (
+                                             <span className="text-xs text-red-500">No parents assigned</span>
+                                           )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                                                         <div className="flex items-center gap-2 ml-4">
+                                       <Link href={`/teacher/students/${student.id}?classId=${classItem.id}`}>
+                                         <Button size="sm" variant="ghost" className="text-blue-600 hover:text-blue-700 hover:bg-blue-50">
+                                           <Eye className="w-4 h-4" />
                                          </Button>
-                                       </DropdownMenuTrigger>
-                                       <DropdownMenuContent align="end">
-                                         <DropdownMenuItem onClick={() => handleDeleteStudent(student.id, student.name)}>
-                                           <Trash2 className="w-4 h-4 mr-2" />
-                                           Delete Student
-                                         </DropdownMenuItem>
-                                       </DropdownMenuContent>
-                                     </DropdownMenu>
-                                   </div>
-                                 </div>
-                               </div>
-                             ))}
-                          </div>
-                        ) : (
-                          <div className="text-center py-4 text-gray-500">
-                            No students in this class yet.
-                          </div>
-                        )}
+                                       </Link>
+                                       <DropdownMenu>
+                                         <DropdownMenuTrigger asChild>
+                                           <Button size="sm" variant="ghost" className="text-gray-600 hover:text-gray-700 hover:bg-gray-50">
+                                             <MoreHorizontal className="w-4 h-4" />
+                                           </Button>
+                                         </DropdownMenuTrigger>
+                                         <DropdownMenuContent align="end">
+                                           <DropdownMenuItem onClick={() => handleRemoveFromClass(student.id, classItem.id)}>
+                                             <Users className="w-4 h-4 mr-2 text-orange-600" />
+                                             <span className="text-orange-600">Remove from Class</span>
+                                           </DropdownMenuItem>
+                                           <DropdownMenuItem onClick={() => handleDeleteStudent(student.id, student.name)}>
+                                             <Trash2 className="w-4 h-4 mr-2 text-red-600" />
+                                             <span className="text-red-600">Delete Student</span>
+                                           </DropdownMenuItem>
+                                         </DropdownMenuContent>
+                                       </DropdownMenu>
+                                     </div>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="text-center py-8">
+                              <Users className="w-8 h-8 mx-auto text-gray-300 mb-2" />
+                              <p className="text-gray-500 text-sm">No students in this class yet</p>
+                              <Button 
+                                size="sm" 
+                                variant="outline"
+                                onClick={() => {
+                                  setSelectedClassForStudent(classItem.id)
+                                  setIsAddStudentOpen(true)
+                                }}
+                                className="mt-2"
+                              >
+                                <Plus className="mr-2 h-3 w-3" />
+                                Add First Student
+                              </Button>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1278,7 +1346,7 @@ export default function TeacherDashboard() {
 // Add Class Form Component
 function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string; studentIds?: string[] }) => void }) {
   const [name, setName] = useState('')
-  const [showStudentSelection, setShowStudentSelection] = useState(false)
+  const [showStudentSelection, setShowStudentSelection] = useState(true)
   const [selectedStudents, setSelectedStudents] = useState<string[]>([])
   const [existingStudents, setExistingStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(false)
