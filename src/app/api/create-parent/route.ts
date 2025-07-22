@@ -20,6 +20,28 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Check if parent already exists in database
+    const { data: existingParent, error: checkError } = await supabaseAdmin
+      .from('parents')
+      .select('id')
+      .eq('email', email.trim())
+      .single()
+
+    if (checkError && checkError.code !== 'PGRST116') {
+      console.error('Error checking existing parent:', checkError)
+      return NextResponse.json(
+        { error: 'Error checking existing parent' },
+        { status: 500 }
+      )
+    }
+
+    if (existingParent) {
+      return NextResponse.json(
+        { error: 'A parent with this email already exists in the system.' },
+        { status: 409 }
+      )
+    }
+
     // Create the auth user using admin API
     const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
       email,
@@ -33,6 +55,15 @@ export async function POST(request: NextRequest) {
 
     if (authError) {
       console.error('Error creating auth user:', authError)
+      
+      // Handle specific error cases
+      if (authError.message.includes('already been registered')) {
+        return NextResponse.json(
+          { error: 'A user with this email address has already been registered. Please use a different email or contact the administrator.' },
+          { status: 409 }
+        )
+      }
+      
       return NextResponse.json(
         { error: authError.message },
         { status: 400 }

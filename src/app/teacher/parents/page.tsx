@@ -144,13 +144,12 @@ export default function TeacherParentsPage() {
             const { data: parentStudentsData, error: parentStudentsError } = await supabase
               .from('student_parent')
               .select(`
-                student_id,
-                students (
+                students!student_parent_student_id_fkey (
                   id,
                   name,
                   class_id,
                   created_at,
-                  classes (
+                  classes!students_class_id_fkey (
                     id,
                     name,
                     teacher_id
@@ -163,45 +162,15 @@ export default function TeacherParentsPage() {
             console.error('Error fetching students for parent:', parent.id, parentStudentsError)
             console.error('Error details:', {
               parentId: parent.id,
-              error: parentStudentsError
+              error: parentStudentsError,
+              message: parentStudentsError.message,
+              details: parentStudentsError.details,
+              hint: parentStudentsError.hint
             })
             
-            // Try fallback to old method if student_parent table doesn't exist
-            try {
-              console.log('Trying fallback method for parent:', parent.id)
-              const { data: fallbackStudentsData, error: fallbackError } = await supabase
-                .from('students')
-                .select(`
-                  id,
-                  name,
-                  class_id,
-                  created_at,
-                  classes (
-                    id,
-                    name,
-                    teacher_id
-                  )
-                `)
-                .eq('parent_id', parent.id)
-
-              if (fallbackError) {
-                console.error('Fallback also failed:', fallbackError)
-                return { ...parent, students: [] }
-              }
-
-              const students = fallbackStudentsData?.map((student: any) => ({
-                id: student.id,
-                name: student.name,
-                class_id: student.class_id,
-                created_at: student.created_at,
-                class: student.classes
-              })) || []
-
-              return { ...parent, students }
-            } catch (fallbackError) {
-              console.error('Fallback method also failed:', fallbackError)
-              return { ...parent, students: [] }
-            }
+            // If student_parent table fails, just return empty students array
+            console.log('student_parent table query failed, returning empty students for parent:', parent.id)
+            return { ...parent, students: [] }
           }
 
           const students = parentStudentsData?.map((sp: any) => ({
@@ -372,9 +341,20 @@ export default function TeacherParentsPage() {
       })
 
       if (!response.ok) {
-        const errorText = await response.text()
-        console.error('API Error Response:', errorText)
-        toast.error('Error creating parent account. Please check the console for details.')
+        try {
+          const errorData = await response.json()
+          console.error('API Error Response:', errorData)
+          
+          if (errorData.error) {
+            toast.error(errorData.error)
+          } else {
+            toast.error('Error creating parent account. Please try again.')
+          }
+        } catch (parseError) {
+          const errorText = await response.text()
+          console.error('API Error Response (raw):', errorText)
+          toast.error('Error creating parent account. Please try again.')
+        }
         return
       }
 
