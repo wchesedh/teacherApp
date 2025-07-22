@@ -300,15 +300,19 @@ export default function StudentProfilePage() {
         .select('*', { count: 'exact', head: true })
         .eq('class_id', currentStudent.class_id)
 
-      // Count teachers (usually 1, but could be more if multiple teachers per class)
-      let teachersCount = 0
-      if (currentClassInfo?.teacher) {
-        teachersCount = 1
-      }
+      // Count teachers for this student's class
+      const { data: classData, error: teachersError } = await supabase
+        .from('classes')
+        .select('teacher_id')
+        .eq('id', currentStudent.class_id)
+        .not('teacher_id', 'is', null)
+        .single()
+      
+      const teachersCount = classData?.teacher_id ? 1 : 0
 
       setStats({
         posts: postsCount || 0,
-        teachers: teachersCount,
+        teachers: teachersCount || 0,
         classmates: classmatesCount || 0
       })
 
@@ -693,133 +697,195 @@ export default function StudentProfilePage() {
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center space-x-3">
-                  <div className="relative">
-                    {student.avatar_url ? (
-                      <img 
-                        src={student.avatar_url} 
-                        alt="Student avatar" 
-                        className="w-12 h-12 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-                        <GraduationCap className="w-6 h-6 text-blue-600" />
-                      </div>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      className="absolute -bottom-1 -right-1 w-6 h-6 p-0 rounded-full"
-                      onClick={() => setShowAvatarDialog(true)}
-                    >
-                      <Camera className="w-3 h-3" />
-                    </Button>
-                  </div>
-                  <div>
-                    {editMode ? (
-                      <div className="space-y-2">
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            placeholder="First name"
-                            value={editForm.first_name}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))}
-                          />
-                          <Input
-                            placeholder="Last name"
-                            value={editForm.last_name}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            placeholder="Middle name (optional)"
-                            value={editForm.middle_name}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))}
-                          />
-                          <Input
-                            placeholder="Suffix (optional)"
-                            value={editForm.suffix}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, suffix: e.target.value }))}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            placeholder="ID Number (optional)"
-                            value={editForm.id_number}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
-                          />
-                          <Input
-                            placeholder="Grade (optional)"
-                            value={editForm.grade}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
-                          />
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <Input
-                            placeholder="Age (optional)"
-                            type="number"
-                            value={editForm.age}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
-                          />
-                          <div className="flex-1"></div>
-                        </div>
-                        <textarea
-                          placeholder="Bio (optional)"
-                          value={editForm.bio}
-                          onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
-                          rows={3}
-                          className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        />
-                        <div className="flex space-x-2">
-                          <Button size="sm" onClick={handleSaveProfile}>
-                            <Save className="w-4 h-4 mr-1" />
-                            Save
-                          </Button>
-                          <Button size="sm" variant="outline" onClick={() => setEditMode(false)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    ) : (
+              <CardContent className="space-y-6">
+                {editMode ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <h3 className="text-lg font-semibold">{student.name}</h3>
-                        <p className="text-sm text-gray-600">Student</p>
-                        {student.bio && (
-                          <p className="text-sm text-gray-500 mt-1">{student.bio}</p>
+                        <Label htmlFor="firstName" className="text-sm font-medium">First Name *</Label>
+                        <Input
+                          id="firstName"
+                          placeholder="First name"
+                          value={editForm.first_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, first_name: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="lastName" className="text-sm font-medium">Last Name *</Label>
+                        <Input
+                          id="lastName"
+                          placeholder="Last name"
+                          value={editForm.last_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, last_name: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <Label htmlFor="middleName" className="text-sm font-medium">Middle Name</Label>
+                        <Input
+                          id="middleName"
+                          placeholder="Middle name (optional)"
+                          value={editForm.middle_name}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, middle_name: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="suffix" className="text-sm font-medium">Suffix</Label>
+                        <Input
+                          id="suffix"
+                          placeholder="Jr., Sr., III (optional)"
+                          value={editForm.suffix}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, suffix: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-3 gap-3">
+                      <div>
+                        <Label htmlFor="idNumber" className="text-sm font-medium">ID Number</Label>
+                        <Input
+                          id="idNumber"
+                          placeholder="Student ID"
+                          value={editForm.id_number}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="grade" className="text-sm font-medium">Grade</Label>
+                        <Input
+                          id="grade"
+                          placeholder="Grade level"
+                          value={editForm.grade}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="age" className="text-sm font-medium">Age</Label>
+                        <Input
+                          id="age"
+                          type="number"
+                          placeholder="Age"
+                          value={editForm.age}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+                    <div>
+                      <Label htmlFor="bio" className="text-sm font-medium">Bio</Label>
+                      <textarea
+                        id="bio"
+                        placeholder="Tell us about this student..."
+                        value={editForm.bio}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                        rows={3}
+                        className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                      />
+                    </div>
+                    <div className="flex space-x-2 pt-2">
+                      <Button size="sm" onClick={handleSaveProfile}>
+                        <Save className="w-4 h-4 mr-1" />
+                        Save Changes
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditMode(false)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-6">
+                    {/* Profile Header */}
+                    <div className="flex items-start space-x-4">
+                      <div className="relative">
+                        {student.avatar_url ? (
+                          <img 
+                            src={student.avatar_url} 
+                            alt="Student avatar" 
+                            className="w-16 h-16 rounded-full object-cover border-2 border-gray-200"
+                          />
+                        ) : (
+                          <div className="w-16 h-16 bg-gradient-to-br from-blue-100 to-blue-200 rounded-full flex items-center justify-center border-2 border-gray-200">
+                            <GraduationCap className="w-8 h-8 text-blue-600" />
+                          </div>
                         )}
-                        {(student.grade || student.age || student.id_number) && (
-                          <div className="flex items-center space-x-2 mt-1">
-                            {student.id_number && (
-                              <Badge variant="default">ID: {student.id_number}</Badge>
-                            )}
-                            {student.grade && (
-                              <Badge variant="secondary">{student.grade}</Badge>
-                            )}
-                            {student.age && (
-                              <Badge variant="outline">{student.age} years old</Badge>
-                            )}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="absolute -bottom-1 -right-1 w-7 h-7 p-0 rounded-full bg-white border border-gray-200 hover:bg-gray-50"
+                          onClick={() => setShowAvatarDialog(true)}
+                        >
+                          <Camera className="w-3 h-3" />
+                        </Button>
+                      </div>
+                      <div className="flex-1">
+                        <h3 className="text-xl font-semibold text-gray-900">{student.name}</h3>
+                        <p className="text-sm text-gray-600 mb-2">Student</p>
+                        {student.bio && (
+                          <p className="text-sm text-gray-600 leading-relaxed">{student.bio}</p>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Student Details Grid */}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-3">
+                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <BookOpen className="w-4 h-4 text-blue-600" />
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">Class</p>
+                            <p className="text-sm font-medium text-gray-900">{classInfo?.name}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
+                          <Calendar className="w-4 h-4 text-green-600" />
+                          <div>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">Joined</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {new Date(student.created_at).toLocaleDateString()}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="space-y-3">
+                        {student.id_number && (
+                          <div className="flex items-center space-x-3 p-3 bg-blue-50 rounded-lg">
+                            <div className="w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center">
+                              <span className="text-xs text-white font-bold">ID</span>
+                            </div>
+                            <div>
+                              <p className="text-xs text-blue-600 uppercase tracking-wide">Student ID</p>
+                              <p className="text-sm font-medium text-blue-900">{student.id_number}</p>
+                            </div>
+                          </div>
+                        )}
+                        {(student.grade || student.age) && (
+                          <div className="flex items-center space-x-3 p-3 bg-purple-50 rounded-lg">
+                            <div className="w-4 h-4 bg-purple-600 rounded-full flex items-center justify-center">
+                              <span className="text-xs text-white font-bold">I</span>
+                            </div>
+                            <div>
+                              <p className="text-xs text-purple-600 uppercase tracking-wide">Details</p>
+                              <div className="flex items-center space-x-2">
+                                {student.grade && (
+                                  <Badge variant="secondary" className="text-xs">{student.grade}</Badge>
+                                )}
+                                {student.age && (
+                                  <Badge variant="outline" className="text-xs">{student.age} years old</Badge>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
-                    )}
+                    </div>
                   </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="flex items-center space-x-2">
-                    <BookOpen className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-600">Class:</span>
-                    <span className="text-sm font-medium">{classInfo?.name}</span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <Calendar className="w-4 h-4 text-gray-500" />
-                    <span className="text-sm text-gray-600">Joined:</span>
-                    <span className="text-sm font-medium">
-                      {new Date(student.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
@@ -829,7 +895,7 @@ export default function StudentProfilePage() {
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
                     <User className="w-5 h-5" />
-                    <span>Parents</span>
+                    <span>{student.parents.length === 1 ? 'Parent' : 'Parents'}</span>
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
