@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile } from 'lucide-react'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile, MoreHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -93,6 +94,9 @@ export default function TeacherDashboard() {
   const [expandedClasses, setExpandedClasses] = useState<string[]>([])
   const [isAddClassOpen, setIsAddClassOpen] = useState(false)
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false)
+  const [isManageStudentsOpen, setIsManageStudentsOpen] = useState(false)
+  const [isDeleteStudentOpen, setIsDeleteStudentOpen] = useState(false)
+  const [studentToDelete, setStudentToDelete] = useState<{ id: string; name: string } | null>(null)
   const [selectedClassForStudent, setSelectedClassForStudent] = useState<string>('')
   const [showCredentials, setShowCredentials] = useState(false)
   const [parentCredentials, setParentCredentials] = useState<{ email: string; password: string } | null>(null)
@@ -198,11 +202,28 @@ export default function TeacherDashboard() {
 
       const classesWithDetails = await Promise.all(
         (classesData || []).map(async (classItem) => {
+          // Fetch students for this class using the student_class relationship table
+          const { data: studentClassData, error: studentClassError } = await supabase
+            .from('student_class')
+            .select('student_id')
+            .eq('class_id', classItem.id)
+
+          if (studentClassError) {
+            console.error('Error fetching student-class relationships for class:', classItem.id, studentClassError)
+            return { ...classItem, students: [] }
+          }
+
+          const studentIds = studentClassData?.map(sc => sc.student_id) || []
+
+          if (studentIds.length === 0) {
+            return { ...classItem, students: [] }
+          }
+
           // Fetch students for this class
           const { data: studentsData, error: studentsError } = await supabase
             .from('students')
             .select('*')
-            .eq('class_id', classItem.id)
+            .in('id', studentIds)
             .order('created_at', { ascending: false })
 
           if (studentsError) {
@@ -418,19 +439,35 @@ export default function TeacherDashboard() {
     )
   }
 
-  const handleAddClass = async (classData: { name: string }) => {
+  const handleAddClass = async (classData: { name: string; studentIds?: string[] }) => {
     try {
-      const { error } = await supabase
+      const { data: classResult, error } = await supabase
         .from('classes')
         .insert([{
           name: classData.name,
           teacher_id: user?.id
         }])
+        .select()
+        .single()
 
       if (error) {
         console.error('Error adding class:', error)
         toast.error('Error creating class: ' + error.message)
         return
+      }
+
+      // If students are selected, update their class_id
+      if (classData.studentIds && classData.studentIds.length > 0) {
+        const { error: updateError } = await supabase
+          .from('students')
+          .update({ class_id: classResult.id })
+          .in('id', classData.studentIds)
+
+        if (updateError) {
+          console.error('Error updating students:', updateError)
+          toast.error('Class created but failed to assign students')
+          return
+        }
       }
 
       await fetchData()
@@ -459,8 +496,7 @@ export default function TeacherDashboard() {
 
       // First add the student - using old name field for now until schema is updated
       const studentDataToInsert: any = {
-        name: `${studentData.first_name} ${studentData.last_name}`.trim(),
-        class_id: studentData.class_id
+        name: `${studentData.first_name} ${studentData.last_name}`.trim()
       }
       
       // Only add id_number if it's provided and not empty
@@ -493,6 +529,19 @@ export default function TeacherDashboard() {
           console.error('Error creating student-parent relationship:', relationshipError)
           // Still show success since student was created
         }
+
+        // Create the student-class relationship
+        const { error: classRelationshipError } = await supabase
+          .from('student_class')
+          .insert([{
+            student_id: studentResult[0].id,
+            class_id: studentData.class_id
+          }])
+
+        if (classRelationshipError) {
+          console.error('Error creating student-class relationship:', classRelationshipError)
+          // Still show success since student was created
+        }
       }
 
       await fetchData()
@@ -505,45 +554,143 @@ export default function TeacherDashboard() {
   }
 
   // Add this function to handle student deletion
-  const handleDeleteStudent = async (studentId: string) => {
-    if (!confirm('Are you sure you want to delete this student?')) {
-      return
-    }
+  const handleDeleteStudent = async (studentId: string, studentName: string) => {
+    setStudentToDelete({ id: studentId, name: studentName })
+    setIsDeleteStudentOpen(true)
+  }
+
+  const confirmDeleteStudent = async () => {
+    if (!studentToDelete) return
+
     try {
       // Verify the student belongs to one of this teacher's classes
-      const { data: studentData, error: studentError } = await supabase
-        .from('students')
+      const { data: studentClassData, error: studentClassError } = await supabase
+        .from('student_class')
         .select('class_id')
-        .eq('id', studentId)
-        .single()
-      if (studentError || !studentData) {
-        toast.error('Student not found')
+        .eq('student_id', studentToDelete.id)
+
+      if (studentClassError) {
+        console.error('Error checking student classes:', studentClassError)
+        toast.error('Error checking student classes')
         return
       }
-      const { data: classData, error: classError } = await supabase
+
+      if (!studentClassData || studentClassData.length === 0) {
+        toast.error('Student not found in any classes')
+        return
+      }
+
+      const classIds = studentClassData.map(sc => sc.class_id)
+
+      // Check if any of these classes belong to this teacher
+      const { data: teacherClassesData, error: teacherClassesError } = await supabase
         .from('classes')
         .select('id')
-        .eq('id', studentData.class_id)
+        .in('id', classIds)
         .eq('teacher_id', user?.id)
-        .single()
-      if (classError || !classData) {
+
+      if (teacherClassesError || !teacherClassesData || teacherClassesData.length === 0) {
         toast.error('You can only delete students from your own classes')
         return
       }
+
+      // Delete the student (this will cascade delete all relationships)
       const { error } = await supabase
         .from('students')
         .delete()
-        .eq('id', studentId)
+        .eq('id', studentToDelete.id)
+
       if (error) {
         console.error('Error deleting student:', error)
         toast.error('Error deleting student: ' + error.message)
       } else {
         await fetchData()
         toast.success('Student deleted successfully!')
+        setIsDeleteStudentOpen(false)
+        setStudentToDelete(null)
       }
     } catch (error) {
       console.error('Error deleting student:', error)
       toast.error('Error deleting student')
+    }
+  }
+
+  // Add this function to handle managing students for a class
+  const handleManageStudents = async (classId: string, studentIds: string[]) => {
+    try {
+      if (studentIds.length === 0) {
+        toast.error('Please select at least one student to add')
+        return
+      }
+
+      // Try to create student-class relationships for the selected students
+      const relationships = studentIds.map(studentId => ({
+        student_id: studentId,
+        class_id: classId
+      }))
+
+      const { error } = await supabase
+        .from('student_class')
+        .insert(relationships)
+
+      if (error) {
+        console.error('Error adding students to class:', error)
+        // If the table doesn't exist, fall back to updating the class_id field
+        const { error: updateError } = await supabase
+          .from('students')
+          .update({ class_id: classId })
+          .in('id', studentIds)
+
+        if (updateError) {
+          console.error('Error updating students:', updateError)
+          toast.error('Error adding students to class: ' + updateError.message)
+          return
+        }
+      }
+
+      await fetchData()
+      setIsManageStudentsOpen(false)
+      toast.success('Students added to class successfully!')
+    } catch (error) {
+      console.error('Error managing students:', error)
+      toast.error('Error adding students to class')
+    }
+  }
+
+  // Add this function to handle removing a student from a specific class
+  const handleRemoveFromClass = async (studentId: string, classId: string) => {
+    if (!confirm('Are you sure you want to remove this student from this class?')) {
+      return
+    }
+    try {
+      // Try to remove the student-class relationship
+      const { error } = await supabase
+        .from('student_class')
+        .delete()
+        .eq('student_id', studentId)
+        .eq('class_id', classId)
+
+      if (error) {
+        console.error('Error removing student from class:', error)
+        // If the table doesn't exist, fall back to setting class_id to null
+        const { error: updateError } = await supabase
+          .from('students')
+          .update({ class_id: null })
+          .eq('id', studentId)
+          .eq('class_id', classId)
+
+        if (updateError) {
+          console.error('Error updating student:', updateError)
+          toast.error('Error removing student from class: ' + updateError.message)
+          return
+        }
+      }
+
+      await fetchData()
+      toast.success('Student removed from class successfully!')
+    } catch (error) {
+      console.error('Error removing student from class:', error)
+      toast.error('Error removing student from class')
     }
   }
 
@@ -808,6 +955,17 @@ export default function TeacherDashboard() {
                           variant="outline"
                           onClick={() => {
                             setSelectedClassForStudent(classItem.id)
+                            setIsManageStudentsOpen(true)
+                          }}
+                        >
+                          <Users className="mr-2 h-3 w-3" />
+                          Manage Students
+                        </Button>
+                        <Button 
+                          size="sm" 
+                          variant="outline"
+                          onClick={() => {
+                            setSelectedClassForStudent(classItem.id)
                             setIsAddStudentOpen(true)
                           }}
                         >
@@ -841,17 +999,30 @@ export default function TeacherDashboard() {
                                        )}
                                      </div>
                                    </div>
-                                   <div className="flex gap-2">
+                                                                      <div className="flex gap-2">
                                      <Link href={`/teacher/students/${student.id}`}>
                                        <Button size="sm" variant="outline">
                                          <Eye className="w-4 h-4 mr-1" />
                                          View Details
                                        </Button>
                                      </Link>
-                                     <Button size="sm" variant="destructive" onClick={() => handleDeleteStudent(student.id)}>
-                                       <Trash2 className="w-4 h-4 mr-1" />
-                                       Delete
+                                     <Button size="sm" variant="outline" onClick={() => handleRemoveFromClass(student.id, classItem.id)}>
+                                       <Users className="w-4 h-4 mr-1" />
+                                       Remove from Class
                                      </Button>
+                                     <DropdownMenu>
+                                       <DropdownMenuTrigger asChild>
+                                         <Button size="sm" variant="outline">
+                                           <MoreHorizontal className="w-4 h-4" />
+                                         </Button>
+                                       </DropdownMenuTrigger>
+                                       <DropdownMenuContent align="end">
+                                         <DropdownMenuItem onClick={() => handleDeleteStudent(student.id, student.name)}>
+                                           <Trash2 className="w-4 h-4 mr-2" />
+                                           Delete Student
+                                         </DropdownMenuItem>
+                                       </DropdownMenuContent>
+                                     </DropdownMenu>
                                    </div>
                                  </div>
                                </div>
@@ -902,6 +1073,66 @@ export default function TeacherDashboard() {
                 setShowCredentials(true)
               }}
             />
+          </DialogContent>
+        </Dialog>
+
+        {/* Manage Students Dialog */}
+        <Dialog open={isManageStudentsOpen} onOpenChange={setIsManageStudentsOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Manage Students</DialogTitle>
+              <DialogDescription>
+                Add existing students to this class
+              </DialogDescription>
+            </DialogHeader>
+            <ManageStudentsForm 
+              onSubmit={(data) => handleManageStudents(data.classId, data.studentIds)}
+              classId={selectedClassForStudent}
+              className={classes.find(c => c.id === selectedClassForStudent)?.name || ''}
+            />
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Student Confirmation Dialog */}
+        <Dialog open={isDeleteStudentOpen} onOpenChange={setIsDeleteStudentOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Delete Student</DialogTitle>
+              <DialogDescription>
+                Are you sure you want to delete this student? This action cannot be undone.
+              </DialogDescription>
+            </DialogHeader>
+            {studentToDelete && (
+              <div className="space-y-4">
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <Trash2 className="w-5 h-5 text-red-600" />
+                    <span className="font-medium text-red-900">Student to Delete:</span>
+                  </div>
+                  <div className="text-sm text-red-800">
+                    <p><strong>Name:</strong> {studentToDelete.name}</p>
+                    <p className="text-xs mt-1">This will permanently remove the student from all classes and delete all associated data.</p>
+                  </div>
+                </div>
+                <div className="flex justify-end space-x-2">
+                  <Button 
+                    variant="outline" 
+                    onClick={() => {
+                      setIsDeleteStudentOpen(false)
+                      setStudentToDelete(null)
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button 
+                    variant="destructive" 
+                    onClick={confirmDeleteStudent}
+                  >
+                    Delete Student
+                  </Button>
+                </div>
+              </div>
+            )}
           </DialogContent>
         </Dialog>
 
@@ -979,15 +1210,85 @@ export default function TeacherDashboard() {
 
 
 // Add Class Form Component
-function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string }) => void }) {
+function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string; studentIds?: string[] }) => void }) {
   const [name, setName] = useState('')
+  const [showStudentSelection, setShowStudentSelection] = useState(false)
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([])
+  const [existingStudents, setExistingStudents] = useState<Student[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    fetchExistingStudents()
+  }, [])
+
+  const fetchExistingStudents = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('students')
+        .select('*')
+        .order('name')
+      
+      if (error) {
+        console.error('Error fetching students:', error)
+      } else {
+        setExistingStudents(data || [])
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error)
+    }
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return
     
-    onSubmit({ name: name.trim() })
-    setName('')
+    setLoading(true)
+    try {
+      // Create the class first
+      const { data: classData, error: classError } = await supabase
+        .from('classes')
+        .insert([{
+          name: name.trim(),
+          teacher_id: (await supabase.auth.getUser()).data.user?.id
+        }])
+        .select()
+        .single()
+
+      if (classError) {
+        console.error('Error creating class:', classError)
+        toast.error('Error creating class')
+        return
+      }
+
+      // If students are selected, create student-class relationships
+      if (selectedStudents.length > 0) {
+        const relationships = selectedStudents.map(studentId => ({
+          student_id: studentId,
+          class_id: classData.id
+        }))
+
+        const { error: relationshipError } = await supabase
+          .from('student_class')
+          .insert(relationships)
+
+        if (relationshipError) {
+          console.error('Error creating student-class relationships:', relationshipError)
+          toast.error('Class created but failed to assign students')
+          return
+        }
+      }
+
+      onSubmit({ name: name.trim(), studentIds: selectedStudents })
+      setName('')
+      setSelectedStudents([])
+      setShowStudentSelection(false)
+      toast.success('Class created successfully!')
+    } catch (error) {
+      console.error('Error creating class:', error)
+      toast.error('Error creating class')
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -1003,9 +1304,67 @@ function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string }) => void
           required
         />
       </div>
+
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          <Label className="text-sm font-medium">Add Existing Students</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setShowStudentSelection(!showStudentSelection)}
+          >
+            {showStudentSelection ? 'Hide' : 'Show'} Student Selection
+          </Button>
+        </div>
+
+        {showStudentSelection && (
+          <div className="space-y-3 p-4 border rounded-lg bg-gray-50">
+            <p className="text-sm text-gray-600 mb-3">
+              Select students to add to this new class:
+            </p>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {existingStudents.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-4">
+                  No existing students found
+                </p>
+              ) : (
+                existingStudents.map((student) => (
+                  <label key={student.id} className="flex items-center space-x-3 p-2 rounded hover:bg-gray-100">
+                    <input
+                      type="checkbox"
+                      checked={selectedStudents.includes(student.id)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedStudents([...selectedStudents, student.id])
+                        } else {
+                          setSelectedStudents(selectedStudents.filter(id => id !== student.id))
+                        }
+                      }}
+                      className="rounded"
+                    />
+                    <div className="flex-1">
+                      <span className="text-sm font-medium">{student.name}</span>
+                      {student.id_number && (
+                        <span className="text-xs text-gray-500 ml-2">ID: {student.id_number}</span>
+                      )}
+                    </div>
+                  </label>
+                ))
+              )}
+            </div>
+            {selectedStudents.length > 0 && (
+              <div className="text-sm text-gray-600">
+                {selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} selected
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
       <div className="flex justify-end space-x-2">
-        <Button type="submit">
-          Create Class
+        <Button type="submit" disabled={loading}>
+          {loading ? 'Creating...' : 'Create Class'}
         </Button>
       </div>
     </form>
@@ -1450,6 +1809,192 @@ function AddStudentForm({
       >
         {loading ? 'Adding Student...' : 'Add Student'}
       </Button>
+    </form>
+  )
+}
+
+// Manage Students Form Component
+function ManageStudentsForm({ 
+  onSubmit, 
+  classId,
+  className
+}: { 
+  onSubmit: (data: { classId: string; studentIds: string[] }) => void
+  classId: string
+  className: string
+}) {
+  const [selectedStudents, setSelectedStudents] = useState<string[]>([])
+  const [existingStudents, setExistingStudents] = useState<Student[]>([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    fetchAvailableStudents()
+  }, [classId])
+
+  const fetchAvailableStudents = async () => {
+    try {
+      // First, get all students that are already in this class
+      const { data: existingRelationships, error: relationshipError } = await supabase
+        .from('student_class')
+        .select('student_id')
+        .eq('class_id', classId)
+
+      if (relationshipError) {
+        console.error('Error fetching existing relationships:', relationshipError)
+        // If the table doesn't exist yet, fall back to the old method
+        // Check if students are in this class using the class_id field
+        const { data: studentsInClass, error: studentsError } = await supabase
+          .from('students')
+          .select('id')
+          .eq('class_id', classId)
+
+        if (studentsError) {
+          console.error('Error fetching students in class:', studentsError)
+          return
+        }
+
+        const existingStudentIds = studentsInClass?.map(s => s.id) || []
+
+        // Fetch all students that are not in this class
+        const { data, error } = await supabase
+          .from('students')
+          .select('*')
+          .not('class_id', 'eq', classId)
+          .order('name')
+
+        if (error) {
+          console.error('Error fetching students:', error)
+        } else {
+          setExistingStudents(data || [])
+        }
+        return
+      }
+
+      const existingStudentIds = existingRelationships?.map(r => r.student_id) || []
+
+      // Then fetch all students that are not in this class
+      let query = supabase
+        .from('students')
+        .select('*')
+        .order('name')
+
+      if (existingStudentIds.length > 0) {
+        // Use a simpler approach - fetch all students and filter in JavaScript
+        const { data, error } = await query
+        
+        if (error) {
+          console.error('Error fetching students:', error)
+          return
+        }
+
+        // Filter out students that are already in this class
+        const availableStudents = (data || []).filter(student => 
+          !existingStudentIds.includes(student.id)
+        )
+        
+        setExistingStudents(availableStudents)
+      } else {
+        // If no existing relationships, all students are available
+        const { data, error } = await query
+        
+        if (error) {
+          console.error('Error fetching students:', error)
+        } else {
+          setExistingStudents(data || [])
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching students:', error)
+    }
+  }
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    if (selectedStudents.length === 0) {
+      toast.error('Please select at least one student to add')
+      return
+    }
+
+    setLoading(true)
+    try {
+      onSubmit({ classId, studentIds: selectedStudents })
+    } catch (error) {
+      console.error('Error managing students:', error)
+      toast.error('Error adding students to class')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="p-4 border rounded-lg bg-blue-50">
+        <div className="flex items-center space-x-2 mb-3">
+          <Users className="w-5 h-5 text-blue-600" />
+          <span className="font-medium text-blue-900">Adding Students to: {className}</span>
+        </div>
+        <p className="text-sm text-blue-700">
+          Select students to add to this class. Students will be moved from their current class (if any) to this class.
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        <Label className="text-sm font-medium">Available Students</Label>
+        <div className="space-y-2 max-h-60 overflow-y-auto border rounded-lg p-3">
+          {existingStudents.length === 0 ? (
+            <div className="text-center py-8 text-gray-500">
+              <Users className="w-8 h-8 mx-auto mb-2 text-gray-400" />
+              <p>No available students found</p>
+              <p className="text-sm">All students are already in this class or other classes</p>
+            </div>
+          ) : (
+            existingStudents.map((student) => (
+              <label key={student.id} className="flex items-center space-x-3 p-3 rounded hover:bg-gray-50 border-b last:border-b-0">
+                <input
+                  type="checkbox"
+                  checked={selectedStudents.includes(student.id)}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setSelectedStudents([...selectedStudents, student.id])
+                    } else {
+                      setSelectedStudents(selectedStudents.filter(id => id !== student.id))
+                    }
+                  }}
+                  className="rounded"
+                />
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium">{student.name}</span>
+                    {student.id_number && (
+                      <Badge variant="outline" className="text-xs">
+                        ID: {student.id_number}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="text-sm text-gray-500 mt-1">
+                    <span className="text-green-600">
+                      Available to add to this class
+                    </span>
+                  </div>
+                </div>
+              </label>
+            ))
+          )}
+        </div>
+        
+        {selectedStudents.length > 0 && (
+          <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
+            <strong>{selectedStudents.length}</strong> student{selectedStudents.length !== 1 ? 's' : ''} selected
+          </div>
+        )}
+      </div>
+
+      <div className="flex justify-end space-x-2">
+        <Button type="submit" disabled={loading || selectedStudents.length === 0}>
+          {loading ? 'Adding Students...' : 'Add Selected Students'}
+        </Button>
+      </div>
     </form>
   )
 }
