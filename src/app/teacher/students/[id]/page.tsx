@@ -148,6 +148,13 @@ export default function StudentProfilePage({
     }
   }, [studentId, user, authLoading, classIdFromUrl])
 
+  // Refresh stats when student or class info changes
+  useEffect(() => {
+    if (student && classInfo) {
+      fetchStudentStats()
+    }
+  }, [student, classInfo])
+
   const fetchStudentStats = async (studentData?: Student, classData?: Class | null) => {
     const currentStudent = studentData || student
     const currentClassInfo = classData || classInfo
@@ -171,37 +178,44 @@ export default function StudentProfilePage({
       
       if (currentClassInfo?.id) {
         try {
-          // Get all posts for this class by this teacher
-          const { data: classPosts, error: classPostsError } = await supabase
+          // Use the same logic as the posts display section
+          const { data: postsData, error: postsError } = await supabase
             .from('posts')
-            .select('id')
-            .eq('class_id', currentClassInfo.id)
+            .select('*')
             .eq('teacher_id', user?.id)
+            .eq('class_id', currentClassInfo.id)
+            .order('created_at', { ascending: false })
 
-          if (classPostsError) {
-            console.error('Error fetching class posts:', classPostsError)
+          if (postsError) {
+            console.error('Error fetching posts:', postsError)
             postsCount = 0
-            postsError = classPostsError
-          } else {
-            // Get post IDs for this class
-            const classPostIds = classPosts?.map(post => post.id) || []
-            console.log('Class post IDs:', classPostIds)
+          } else if (postsData && postsData.length > 0) {
+            // Filter posts to only include those tagged with this student
+            const { data: tagData, error: tagError } = await supabase
+              .from('post_student_tags')
+              .select('post_id')
+              .eq('student_id', currentStudent.id)
+              .in('post_id', postsData.map(post => post.id))
 
-            if (classPostIds.length > 0) {
-              // Count posts tagged to this student
-              const { count, error } = await supabase
-                .from('post_student_tags')
-                .select('*', { count: 'exact', head: true })
-                .eq('student_id', currentStudent.id)
-                .in('post_id', classPostIds)
-              
-              postsCount = count || 0
-              postsError = error
-              console.log('Posts count query result:', { count, error, classPostIds })
-            } else {
+            if (tagError) {
+              console.error('Error fetching post tags:', tagError)
               postsCount = 0
-              console.log('No posts found for this class')
+            } else {
+              // Get the post IDs that are tagged with this student
+              const taggedPostIds = tagData?.map(tag => tag.post_id) || []
+              
+              // Count posts that are tagged with this student
+              postsCount = postsData.filter(post => taggedPostIds.includes(post.id)).length
+              console.log('Posts count result:', { 
+                totalPosts: postsData.length,
+                taggedPostIds: taggedPostIds.length,
+                finalCount: postsCount,
+                classId: currentClassInfo.id
+              })
             }
+          } else {
+            postsCount = 0
+            console.log('No posts found for this class')
           }
         } catch (error) {
           console.error('Error counting posts for student in class:', currentStudent.id, currentClassInfo.id, error)
@@ -218,20 +232,34 @@ export default function StudentProfilePage({
       
       if (currentClassInfo?.id) {
         try {
-          // Simple count of students in this class
-          const { count, error } = await supabase
+          // First try to count students using student_class table
+          const { data: classStudents, error: studentClassError } = await supabase
             .from('student_class')
-            .select('*', { count: 'exact', head: true })
+            .select('student_id')
             .eq('class_id', currentClassInfo.id)
           
-          if (error) {
-            console.error('Error fetching classmates:', error)
-            classmatesCount = 0
-            classmatesError = error
+          if (studentClassError) {
+            console.log('student_class table error, trying old method...')
+            // Fallback to old method using students table
+            const { data: oldClassStudents, error: oldError } = await supabase
+              .from('students')
+              .select('id')
+              .eq('class_id', currentClassInfo.id)
+            
+            if (oldError) {
+              console.error('Error fetching classmates (both methods):', oldError)
+              classmatesCount = 0
+              classmatesError = oldError
+            } else {
+              const allStudents = oldClassStudents || []
+              classmatesCount = allStudents.filter(student => student.id !== currentStudent.id).length
+              console.log('Classmates count result (old method):', { totalStudents: allStudents.length, classmatesCount, classId: currentClassInfo.id })
+            }
           } else {
-            // Subtract 1 to exclude the current student
-            classmatesCount = Math.max((count || 0) - 1, 0)
-            console.log('Classmates count result:', { count, classmatesCount })
+            // Use new method
+            const allStudents = classStudents || []
+            classmatesCount = allStudents.filter(student => student.student_id !== currentStudent.id).length
+            console.log('Classmates count result (new method):', { totalStudents: allStudents.length, classmatesCount, classId: currentClassInfo.id })
           }
         } catch (error) {
           console.error('Error counting classmates:', error)
@@ -248,7 +276,7 @@ export default function StudentProfilePage({
       
       if (currentClassInfo?.id) {
         try {
-          // Simple check if class has a teacher
+          // Check if class has a teacher assigned
           const { data: classData, error } = await supabase
             .from('classes')
             .select('teacher_id')
@@ -273,8 +301,15 @@ export default function StudentProfilePage({
         classmates: classmatesCount || 0
       }
       console.log('Setting final stats:', finalStats)
-      setStats(finalStats)
-
+      console.log('Stats breakdown:', {
+        postsCount,
+        teachersCount,
+        classmatesCount,
+        studentId: currentStudent.id,
+        classId: currentClassInfo.id,
+        teacherId: user?.id
+      })
+      
       // Log any errors for debugging
       if (postsError) {
         console.error('Error fetching posts count:', postsError)
@@ -300,6 +335,13 @@ export default function StudentProfilePage({
           error: teachersError
         })
       }
+
+      // Log the final counts for debugging
+      console.log('Final counts:', { postsCount, teachersCount, classmatesCount })
+      console.log('Student:', currentStudent.id)
+      console.log('Class:', currentClassInfo.id)
+      
+      setStats(finalStats)
 
     } catch (error) {
       console.error('Error fetching student stats:', error)
@@ -380,23 +422,128 @@ export default function StudentProfilePage({
         .eq('class_id', effectiveClassId)
         .single()
 
-              if (studentInClassError) {
-          console.log('Student not found in student_class table, checking old method...')
-          // Fallback to old method
-          if (studentData.class_id === effectiveClassId) {
-            console.log('Student found in old class_id method')
-            setClassInfo(classData)
-          } else {
-            console.error('Student is not enrolled in this class')
-            console.error('Student class_id:', studentData.class_id)
-            console.error('Requested class_id:', effectiveClassId)
-            toast.error('Student is not enrolled in this class')
-            return
-          }
-        } else {
-          console.log('Student found in student_class table')
+      if (studentInClassError) {
+        console.log('Student not found in student_class table, checking old method...')
+        // Fallback to old method
+        if (studentData.class_id === effectiveClassId) {
+          console.log('Student found in old class_id method')
           setClassInfo(classData)
+        } else {
+          console.error('Student is not enrolled in this class')
+          console.error('Student class_id:', studentData.class_id)
+          console.error('Requested class_id:', effectiveClassId)
+          toast.error('Student is not enrolled in this class')
+          return
         }
+      } else {
+        console.log('Student found in student_class table')
+        setClassInfo(classData)
+      }
+
+      // Debug: Check if student is properly enrolled
+      console.log('Student enrollment check:', {
+        studentId,
+        classId: effectiveClassId,
+        studentClassId: studentData.class_id,
+        studentInClass: !!studentInClass,
+        studentInClassError: studentInClassError?.message
+      })
+
+      // Debug: Check database state
+      console.log('Database state check:', {
+        student: {
+          id: studentData.id,
+          name: studentData.name,
+          class_id: studentData.class_id
+        },
+        class: {
+          id: classData.id,
+          name: classData.name,
+          teacher_id: classData.teacher_id
+        },
+        user: {
+          id: user?.id,
+          email: user?.email
+        }
+      })
+
+      // Debug: Check for existing posts
+      const { data: debugPosts, error: debugPostsError } = await supabase
+        .from('posts')
+        .select('id, content, class_id, teacher_id')
+        .eq('class_id', effectiveClassId)
+        .eq('teacher_id', user?.id)
+
+      console.log('Debug posts check:', {
+        posts: debugPosts,
+        error: debugPostsError,
+        classId: effectiveClassId,
+        teacherId: user?.id
+      })
+
+      // Debug: Check for post tags
+      if (debugPosts && debugPosts.length > 0) {
+        const { data: debugTags, error: debugTagsError } = await supabase
+          .from('post_student_tags')
+          .select('post_id, student_id')
+          .eq('student_id', studentId)
+          .in('post_id', debugPosts.map(p => p.id))
+
+        console.log('Debug tags check:', {
+          tags: debugTags,
+          error: debugTagsError,
+          studentId,
+          postIds: debugPosts.map(p => p.id)
+        })
+      }
+
+      // Debug: Check for students in class
+      const { data: debugStudents, error: debugStudentsError } = await supabase
+        .from('student_class')
+        .select('student_id')
+        .eq('class_id', effectiveClassId)
+
+      console.log('Debug students check:', {
+        students: debugStudents,
+        error: debugStudentsError,
+        classId: effectiveClassId,
+        totalStudents: debugStudents?.length || 0
+      })
+
+      // Debug: Check if student is in this class
+      const { data: studentInClassDebug, error: studentInClassDebugError } = await supabase
+        .from('student_class')
+        .select('student_id')
+        .eq('student_id', studentId)
+        .eq('class_id', effectiveClassId)
+
+      console.log('Debug student in class check:', {
+        studentInClass: studentInClassDebug,
+        error: studentInClassDebugError,
+        studentId,
+        classId: effectiveClassId
+      })
+
+      // Debug: Check for posts specifically for this student
+      const { data: studentPostsDebug, error: studentPostsDebugError } = await supabase
+        .from('post_student_tags')
+        .select(`
+          post_id,
+          posts (
+            id,
+            content,
+            class_id,
+            teacher_id
+          )
+        `)
+        .eq('student_id', studentId)
+
+      console.log('Debug student posts check:', {
+        studentPosts: studentPostsDebug,
+        error: studentPostsDebugError,
+        studentId,
+        totalPosts: studentPostsDebug?.length || 0
+      })
 
       // Fetch student's parents
       const { data: studentParentsData, error: studentParentsError } = await supabase
@@ -501,7 +648,7 @@ export default function StudentProfilePage({
       }
 
       // Fetch stats after all data is loaded
-      await fetchStudentStats(studentData, classInfo)
+      await fetchStudentStats(studentData, classData)
 
     } catch (error) {
       console.error('Error fetching student details:', error)
@@ -651,6 +798,7 @@ export default function StudentProfilePage({
 
       setIsCreatePostOpen(false)
       await fetchStudentDetails() // Refresh posts
+      await fetchStudentStats() // Refresh stats
       toast.success('Post created successfully!')
     } catch (error) {
       console.error('Error creating post:', error)
@@ -723,6 +871,10 @@ export default function StudentProfilePage({
 
       // Optimistic update - remove from UI with animation
       setPosts(prev => prev.filter(post => post.id !== postId));
+      
+      // Refresh stats to reflect the deleted post
+      await fetchStudentStats();
+      
       toast.success('Post deleted successfully!');
     } catch (error) {
       console.error('Error deleting post:', error);
@@ -759,7 +911,8 @@ export default function StudentProfilePage({
       setShowEditDialog(false);
       setEditingPost(null);
       setEditContent('');
-      fetchStudentDetails(); // Refresh the posts
+      await fetchStudentDetails(); // Refresh the posts
+      await fetchStudentStats(); // Refresh stats
     } catch (error) {
       console.error('Error updating post:', error);
       toast.error('Error updating post');
