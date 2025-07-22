@@ -39,11 +39,11 @@ import { formatFullName, getDisplayName } from '@/lib/utils'
 
 interface Student {
   id: string
-  first_name: string
+  first_name?: string
   middle_name?: string
-  last_name: string
+  last_name?: string
   suffix?: string
-  name?: string
+  name: string
   id_number?: string
   class_id: string
   created_at: string
@@ -199,12 +199,17 @@ export default function StudentProfilePage() {
         }
       }
 
+      // Parse the student name to get first and last name
+      const nameParts = studentData.name?.split(' ') || []
+      const firstName = nameParts[0] || ''
+      const lastName = nameParts.slice(1).join(' ') || ''
+      
       // Set edit form
       setEditForm({
-        first_name: studentData.first_name || '',
-        middle_name: studentData.middle_name || '',
-        last_name: studentData.last_name || '',
-        suffix: studentData.suffix || '',
+        first_name: firstName,
+        middle_name: '',
+        last_name: lastName,
+        suffix: '',
         id_number: studentData.id_number || '',
         bio: studentData.bio || '',
         grade: studentData.grade || '',
@@ -365,13 +370,13 @@ export default function StudentProfilePage() {
     if (!student) return
 
     try {
+      // Create combined name from separate fields
+      const combinedName = `${editForm.first_name} ${editForm.last_name}`.trim()
+      
       const { error } = await supabase
         .from('students')
         .update({
-          first_name: editForm.first_name,
-          middle_name: editForm.middle_name || undefined,
-          last_name: editForm.last_name,
-          suffix: editForm.suffix || undefined,
+          name: combinedName,
           id_number: editForm.id_number || undefined,
           bio: editForm.bio || undefined,
           grade: editForm.grade || undefined,
@@ -388,10 +393,7 @@ export default function StudentProfilePage() {
       // Update local state
       setStudent(prev => prev ? {
         ...prev,
-        first_name: editForm.first_name,
-        middle_name: editForm.middle_name || undefined,
-        last_name: editForm.last_name,
-        suffix: editForm.suffix || undefined,
+        name: combinedName,
         id_number: editForm.id_number || undefined,
         bio: editForm.bio || undefined,
         grade: editForm.grade || undefined,
@@ -621,7 +623,7 @@ export default function StudentProfilePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s Profile
+                {student.name}'s Profile
               </h1>
               <p className="text-gray-600 mt-2">
                 Student details and progress updates
@@ -785,7 +787,7 @@ export default function StudentProfilePage() {
                       </div>
                     ) : (
                       <div>
-                        <h3 className="text-lg font-semibold">{getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}</h3>
+                        <h3 className="text-lg font-semibold">{student.name}</h3>
                         <p className="text-sm text-gray-600">Student</p>
                         {student.bio && (
                           <p className="text-sm text-gray-500 mt-1">{student.bio}</p>
@@ -869,7 +871,7 @@ export default function StudentProfilePage() {
                       <span>Progress Updates</span>
                     </CardTitle>
                     <CardDescription>
-                      Posts about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress
+                      Posts about {student.name}'s progress
                     </CardDescription>
                   </div>
                   <Button onClick={() => setIsCreatePostOpen(true)}>
@@ -884,7 +886,7 @@ export default function StudentProfilePage() {
                     <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Posts Yet</h3>
                     <p className="text-gray-600 mb-4">
-                      Start sharing updates about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress with their parents.
+                      Start sharing updates about {student.name}'s progress with their parents.
                     </p>
                     <Button onClick={() => setIsCreatePostOpen(true)}>
                       <MessageSquare className="w-4 h-4 mr-2" />
@@ -1008,14 +1010,14 @@ export default function StudentProfilePage() {
         <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
           <DialogContent>
             <DialogHeader>
-              <DialogTitle>Create Post About {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}</DialogTitle>
-              <DialogDescription>
-                Share updates about {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s progress with their parents
-              </DialogDescription>
+                          <DialogTitle>Create Post About {student.name}</DialogTitle>
+            <DialogDescription>
+              Share updates about {student.name}'s progress with their parents
+            </DialogDescription>
             </DialogHeader>
             <CreatePostForm 
               onSubmit={handleCreatePost}
-              studentName={formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}
+              studentName={student.name || 'Student'}
             />
           </DialogContent>
         </Dialog>
@@ -1057,7 +1059,7 @@ export default function StudentProfilePage() {
             <DialogHeader>
               <DialogTitle>Update Student Avatar</DialogTitle>
               <DialogDescription>
-                Upload a profile picture for {formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix)}
+                Upload a profile picture for {student.name}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
@@ -1103,7 +1105,7 @@ export default function StudentProfilePage() {
             <DialogHeader>
               <DialogTitle>Edit Post</DialogTitle>
               <DialogDescription>
-                Update the content of your post about {student ? formatFullName(student.first_name, student.last_name, student.middle_name, student.suffix) : 'this student'}
+                Update the content of your post about {student ? student.name : 'this student'}
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
