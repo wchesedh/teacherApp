@@ -670,23 +670,51 @@ export default function StudentProfilePage({
     try {
       setUploadingAvatar(true)
 
-      // Upload to Supabase Storage
+      // Upload to Supabase Storage with proper folder structure
       const fileExt = file.name.split('.').pop()
       const fileName = `${student.id}-${Date.now()}.${fileExt}`
-      const { data, error } = await supabase.storage
-        .from('avatars')
-        .upload(fileName, file)
+      const filePath = `student-avatars/${fileName}`
+      
+      console.log('Attempting to upload file:', {
+        fileName,
+        filePath,
+        fileSize: file.size,
+        fileType: file.type
+      })
 
-      if (error) {
-        console.error('Error uploading avatar:', error)
-        toast.error('Error uploading avatar')
+      const { data, error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file, {
+          cacheControl: '3600',
+          upsert: false
+        })
+
+      if (uploadError) {
+        console.error('Upload error details:', {
+          message: uploadError.message,
+          name: uploadError.name,
+          details: uploadError.details,
+          hint: uploadError.hint
+        })
+        
+        if (uploadError.message?.includes('bucket') || uploadError.message?.includes('not found')) {
+          toast.error('Storage bucket not found. Please create an "avatars" bucket in Supabase Storage.')
+        } else if (uploadError.message?.includes('policy') || uploadError.message?.includes('permission')) {
+          toast.error('Storage permission denied. Please check storage policies.')
+        } else {
+          toast.error(`Error uploading avatar: ${uploadError.message}`)
+        }
         return
       }
+
+      console.log('Upload successful:', data)
 
       // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from('avatars')
-        .getPublicUrl(fileName)
+        .getPublicUrl(filePath)
+
+      console.log('Public URL:', publicUrl)
 
       // Update student record
       const { error: updateError } = await supabase
@@ -696,7 +724,7 @@ export default function StudentProfilePage({
 
       if (updateError) {
         console.error('Error updating student avatar:', updateError)
-        toast.error('Error updating student avatar')
+        toast.error('Error updating student avatar: ' + updateError.message)
         return
       }
 
@@ -706,8 +734,8 @@ export default function StudentProfilePage({
       setShowAvatarDialog(false)
 
     } catch (error) {
-      console.error('Error uploading avatar:', error)
-      toast.error('Error uploading avatar')
+      console.error('Unexpected error during avatar upload:', error)
+      toast.error('Unexpected error uploading avatar. Please try again.')
     } finally {
       setUploadingAvatar(false)
     }

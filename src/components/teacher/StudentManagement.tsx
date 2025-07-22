@@ -21,6 +21,7 @@ interface Student {
   id_number?: string
   class_id: string | null
   created_at: string
+  avatar_url?: string
 }
 
 interface Class {
@@ -92,7 +93,7 @@ export default function StudentManagement() {
       // Fetch students in teacher's classes
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select('*')
+        .select('id, name, id_number, class_id, created_at, avatar_url')
         .in('class_id', classIds)
         .order('created_at', { ascending: false })
       

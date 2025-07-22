@@ -18,6 +18,7 @@ interface Student {
   name: string
   class_id: string | null
   created_at?: string
+  avatar_url?: string
 }
 
 interface Class {
@@ -112,7 +113,7 @@ export default function StudentManagement() {
       // Fetch students
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select('*')
+        .select('id, name, class_id, created_at, avatar_url')
       
       console.log('Students response:', { data: studentsData, error: studentsError })
       

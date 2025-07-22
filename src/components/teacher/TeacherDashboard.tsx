@@ -46,6 +46,7 @@ interface Student {
   id_number?: string
   class_id: string
   created_at: string
+  avatar_url?: string
   parents?: Parent[]
 }
 
@@ -238,7 +239,7 @@ export default function TeacherDashboard() {
           // Fetch students for this class
           const { data: studentsData, error: studentsError } = await supabase
             .from('students')
-            .select('*')
+            .select('id, name, id_number, class_id, created_at, avatar_url')
             .in('id', studentIds)
             .order('created_at', { ascending: false })
 
@@ -1114,9 +1115,17 @@ export default function TeacherDashboard() {
                                 <div key={student.id} className="bg-white rounded-lg border border-gray-200 p-4 hover:shadow-sm transition-shadow">
                                   <div className="flex items-center justify-between">
                                     <div className="flex items-center space-x-3 flex-1">
-                                      <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
-                                        {student.name.charAt(0).toUpperCase()}
-                                      </div>
+                                      {student.avatar_url ? (
+                                        <img 
+                                          src={student.avatar_url} 
+                                          alt={`${student.name} avatar`} 
+                                          className="w-8 h-8 rounded-full object-cover border border-gray-200"
+                                        />
+                                      ) : (
+                                        <div className="w-8 h-8 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-sm font-medium">
+                                          {student.name.charAt(0).toUpperCase()}
+                                        </div>
+                                      )}
                                       <div className="flex-1 min-w-0">
                                         <h5 className="font-medium text-gray-900 truncate">{student.name}</h5>
                                         <div className="flex items-center space-x-2 mt-1">
@@ -1375,7 +1384,7 @@ function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string; studentId
     try {
       const { data, error } = await supabase
         .from('students')
-        .select('*')
+        .select('id, name, id_number, class_id, created_at, avatar_url')
         .order('name')
       
       if (error) {
@@ -1493,6 +1502,17 @@ function AddClassForm({ onSubmit }: { onSubmit: (data: { name: string; studentId
                       }}
                       className="rounded"
                     />
+                    {student.avatar_url ? (
+                      <img 
+                        src={student.avatar_url} 
+                        alt={`${student.name} avatar`} 
+                        className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                      />
+                    ) : (
+                      <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-xs font-medium">
+                        {student.name.charAt(0).toUpperCase()}
+                      </div>
+                    )}
                     <div className="flex-1">
                       <span className="text-sm font-medium">{student.name}</span>
                       {student.id_number && (
@@ -2113,6 +2133,17 @@ function ManageStudentsForm({
                   }}
                   className="rounded"
                 />
+                {student.avatar_url ? (
+                  <img 
+                    src={student.avatar_url} 
+                    alt={`${student.name} avatar`} 
+                    className="w-6 h-6 rounded-full object-cover border border-gray-200"
+                  />
+                ) : (
+                  <div className="w-6 h-6 bg-gradient-to-br from-green-500 to-emerald-600 rounded-full flex items-center justify-center text-white text-xs font-medium">
+                    {student.name.charAt(0).toUpperCase()}
+                  </div>
+                )}
                 <div className="flex-1">
                   <div className="flex items-center space-x-2">
                     <span className="font-medium">{student.name}</span>

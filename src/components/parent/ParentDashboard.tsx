@@ -29,6 +29,7 @@ interface Student {
   name: string
   class_id: string | null
   created_at: string
+  avatar_url?: string
   class?: Class
   classes?: Class[]
 }
@@ -142,7 +143,8 @@ export default function ParentDashboard() {
               id,
               name,
               class_id,
-              created_at
+              created_at,
+              avatar_url
             )
           `)
           .eq('parent_id', parentData.id)
@@ -844,9 +846,17 @@ export default function ParentDashboard() {
                     <div key={student.id} className="border rounded-lg p-4">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center space-x-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <GraduationCap className="w-5 h-5 text-blue-600" />
-                          </div>
+                          {student.avatar_url ? (
+                            <img 
+                              src={student.avatar_url} 
+                              alt={`${student.name} avatar`} 
+                              className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                            />
+                          ) : (
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                              <GraduationCap className="w-5 h-5 text-blue-600" />
+                            </div>
+                          )}
                           <div>
                             <h4 className="font-medium text-gray-900">{student.name}</h4>
                             <p className="text-sm text-gray-600">Student</p>
