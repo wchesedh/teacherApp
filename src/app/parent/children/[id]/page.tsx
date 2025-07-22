@@ -286,26 +286,56 @@ export default function ParentStudentProfilePage() {
 
     try {
       // Count posts for this student
-      const { count: postsCount, error: postsError } = await supabase
-        .from('post_student_tags')
-        .select('*', { count: 'exact', head: true })
-        .eq('student_id', currentStudent.id)
+      let postsCount = 0
+      let postsError = null
+      
+      try {
+        const { count, error } = await supabase
+          .from('post_student_tags')
+          .select('*', { count: 'exact', head: true })
+          .eq('student_id', currentStudent.id)
+        
+        postsCount = count || 0
+        postsError = error
+      } catch (error) {
+        console.error('Error counting posts for student:', currentStudent.id, error)
+        postsCount = 0
+        postsError = error
+      }
 
       // Count classmates (students in the same class)
-      const { count: classmatesCount, error: classmatesError } = await supabase
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('class_id', currentStudent.class_id)
+      let classmatesCount = 0
+      let classmatesError = null
+      
+      if (currentStudent.class_id) {
+        const { count, error } = await supabase
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .eq('class_id', currentStudent.class_id)
+        
+        classmatesCount = count || 0
+        classmatesError = error
+      } else {
+        console.log('Student has no class_id, setting classmates count to 0')
+      }
 
       // Count teachers for this student's class
-      const { data: classData, error: teachersError } = await supabase
-        .from('classes')
-        .select('teacher_id')
-        .eq('id', currentStudent.class_id)
-        .not('teacher_id', 'is', null)
-        .single()
+      let teachersCount = 0
+      let teachersError = null
       
-      const teachersCount = classData?.teacher_id ? 1 : 0
+      if (currentStudent.class_id) {
+        const { data: classData, error } = await supabase
+          .from('classes')
+          .select('teacher_id')
+          .eq('id', currentStudent.class_id)
+          .not('teacher_id', 'is', null)
+          .single()
+        
+        teachersCount = classData?.teacher_id ? 1 : 0
+        teachersError = error
+      } else {
+        console.log('Student has no class_id, setting teachers count to 0')
+      }
 
       setStats({
         posts: postsCount || 0,
@@ -314,8 +344,29 @@ export default function ParentStudentProfilePage() {
       })
 
       // Log any errors for debugging
-      if (postsError) console.error('Error fetching posts count:', postsError)
-      if (classmatesError) console.error('Error fetching classmates count:', classmatesError)
+      if (postsError) {
+        console.error('Error fetching posts count:', postsError)
+        console.error('Posts error details:', {
+          studentId: currentStudent.id,
+          error: postsError
+        })
+      }
+      if (classmatesError) {
+        console.error('Error fetching classmates count:', classmatesError)
+        console.error('Classmates error details:', {
+          studentId: currentStudent.id,
+          classId: currentStudent.class_id,
+          error: classmatesError
+        })
+      }
+      if (teachersError) {
+        console.error('Error fetching teachers count:', teachersError)
+        console.error('Teachers error details:', {
+          studentId: currentStudent.id,
+          classId: currentStudent.class_id,
+          error: teachersError
+        })
+      }
 
     } catch (error) {
       console.error('Error fetching student stats:', error)

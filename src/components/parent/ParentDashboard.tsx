@@ -30,6 +30,7 @@ interface Student {
   class_id: string | null
   created_at: string
   class?: Class
+  classes?: Class[]
 }
 
 interface Class {
@@ -51,6 +52,7 @@ interface Post {
   created_at: string
   teacher?: Teacher
   student?: Student
+  class?: Class
   image_url?: string
   reactions?: {
     thumbs_up: number
@@ -130,48 +132,122 @@ export default function ParentDashboard() {
       }
 
       // Get students linked to this parent
-      const { data: studentParentsData, error: studentParentsError } = await supabase
-        .from('student_parent')
-        .select(`
-          student_id,
-          students (
-            id,
-            name,
-            class_id,
-            created_at,
-            classes (
+      let studentsData: Student[] = []
+      
+      try {
+        const { data: studentParentsData, error: studentParentsError } = await supabase
+          .from('student_parent')
+          .select(`
+            students!student_parent_student_id_fkey (
               id,
               name,
-              teacher_id,
-              teachers (
-                id,
-                name,
-                email
-              )
+              class_id,
+              created_at
             )
+          `)
+          .eq('parent_id', parentData.id)
+
+        if (studentParentsError) {
+          console.error('Error fetching student-parent relationships:', studentParentsError)
+          console.error('Error details:', {
+            parentId: parentData.id,
+            error: studentParentsError,
+            message: studentParentsError.message,
+            details: studentParentsError.details,
+            hint: studentParentsError.hint
+          })
+          
+          // If student_parent table fails, just return empty students array
+          console.log('student_parent table query failed, returning empty students for parent:', parentData.id)
+          studentsData = []
+        } else {
+          // Transform the data and fetch all classes for each student
+          const studentsWithClasses = await Promise.all(
+            (studentParentsData || []).map(async (sp: any) => {
+              // Get all classes for this student using student_class table
+              const { data: studentClassesData, error: studentClassesError } = await supabase
+                .from('student_class')
+                .select(`
+                  classes!student_class_class_id_fkey (
+                    id,
+                    name,
+                    teacher_id,
+                    teachers!classes_teacher_id_fkey (
+                      id,
+                      name,
+                      email
+                    )
+                  )
+                `)
+                .eq('student_id', sp.students.id)
+
+              if (studentClassesError) {
+                console.error('Error fetching classes for student:', sp.students.id, studentClassesError)
+                // Fallback to single class if student_class table fails
+                const { data: singleClassData, error: singleClassError } = await supabase
+                  .from('classes')
+                  .select(`
+                    id,
+                    name,
+                    teacher_id,
+                    teachers!classes_teacher_id_fkey (
+                      id,
+                      name,
+                      email
+                    )
+                  `)
+                  .eq('id', sp.students.class_id)
+                  .single()
+
+                if (singleClassError) {
+                  console.error('Error fetching single class for student:', sp.students.id, singleClassError)
+                  return {
+                    id: sp.students.id,
+                    name: sp.students.name,
+                    class_id: sp.students.class_id,
+                    created_at: sp.students.created_at,
+                    class: null,
+                    classes: []
+                  }
+                }
+
+                return {
+                  id: sp.students.id,
+                  name: sp.students.name,
+                  class_id: sp.students.class_id,
+                  created_at: sp.students.created_at,
+                  class: singleClassData,
+                  classes: singleClassData ? [singleClassData] : []
+                }
+              }
+
+              const classes = studentClassesData?.map((sc: any) => sc.classes) || []
+              
+              return {
+                id: sp.students.id,
+                name: sp.students.name,
+                class_id: sp.students.class_id,
+                created_at: sp.students.created_at,
+                class: classes[0] || null, // Keep for backward compatibility
+                classes: classes
+              }
+            })
           )
-        `)
-        .eq('parent_id', parentData.id)
 
-      if (studentParentsError) {
-        console.error('Error fetching student-parent relationships:', studentParentsError)
-        toast.error('Error loading children data')
-        return
+          studentsData = studentsWithClasses
+        }
+      } catch (error) {
+        console.error('Error processing student-parent relationships:', error)
+        studentsData = []
       }
-
-      // Transform the data
-      const studentsData = studentParentsData?.map((sp: any) => ({
-        id: sp.students.id,
-        name: sp.students.name,
-        class_id: sp.students.class_id,
-        created_at: sp.students.created_at,
-        class: sp.students.classes
-      })) || []
 
       setStudents(studentsData)
 
-      // Get unique class IDs
-      const classIds = [...new Set(studentsData.map(s => s.class_id).filter(Boolean))]
+      // Get unique class IDs from all classes of all students
+      const allClassIds = studentsData.flatMap(s => 
+        s.classes ? s.classes.map(c => c.id) : (s.class_id ? [s.class_id] : [])
+      )
+      const classIds = [...new Set(allClassIds)]
 
       // Get posts for all classes this parent's children are in
       let allPosts: Post[] = []
@@ -185,10 +261,15 @@ export default function ParentDashboard() {
               id,
               content,
               created_at,
+              class_id,
               teachers (
                 id,
                 name,
                 email
+              ),
+              classes (
+                id,
+                name
               ),
               image_url
             ),
@@ -209,6 +290,7 @@ export default function ParentDashboard() {
             created_at: item.posts.created_at,
             teacher: item.posts.teachers,
             student: item.students,
+            class: item.posts.classes,
             image_url: item.posts.image_url
           })) || []
         }
@@ -281,61 +363,129 @@ export default function ParentDashboard() {
         if (announcementsError) {
           console.error('Error fetching class announcements:', announcementsError)
         } else {
-          // Transform announcements data and fetch reactions
-          allClassAnnouncements = await Promise.all(
-            (announcementsData || []).map(async (item: any) => {
-              // Get reaction counts for this announcement
-              const { data: reactionCounts, error: reactionCountsError } = await supabase
-                .from('post_reactions')
-                .select('reaction_type')
-                .eq('post_id', item.id)
+          // Filter out posts that are tagged with specific students (student posts)
+          const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+            .from('post_student_tags')
+            .select('post_id')
+            .in('post_id', (announcementsData || []).map(post => post.id))
 
-              // Get user's reactions for this announcement
-              const { data: userReactions, error: userReactionsError } = await supabase
-                .from('post_reactions')
-                .select('reaction_type')
-                .eq('post_id', item.id)
-                .eq('parent_id', user.id)
+          if (studentTagsError) {
+            console.error('Error fetching student tags:', studentTagsError)
+            // If we can't fetch student tags, show all posts as announcements
+            allClassAnnouncements = await Promise.all(
+              (announcementsData || []).map(async (item: any) => {
+                // Get reaction counts for this announcement
+                const { data: reactionCounts, error: reactionCountsError } = await supabase
+                  .from('post_reactions')
+                  .select('reaction_type')
+                  .eq('post_id', item.id)
 
-              // Calculate reaction counts
-              const reactions = {
-                thumbs_up: 0,
-                heart: 0,
-                clap: 0,
-                smile:0               }
+                // Get user's reactions for this announcement
+                const { data: userReactions, error: userReactionsError } = await supabase
+                  .from('post_reactions')
+                  .select('reaction_type')
+                  .eq('post_id', item.id)
+                  .eq('parent_id', user.id)
 
-              if (!reactionCountsError && reactionCounts) {
-                reactionCounts.forEach((reaction: any) => {
-                  if (reactions.hasOwnProperty(reaction.reaction_type)) {
-                    reactions[reaction.reaction_type as keyof typeof reactions]++
-                  }
-                })
-              }
+                // Calculate reaction counts
+                const reactions = {
+                  thumbs_up: 0,
+                  heart: 0,
+                  clap: 0,
+                  smile: 0
+                }
 
-              // Get user's reactions
-              const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+                if (!reactionCountsError && reactionCounts) {
+                  reactionCounts.forEach((reaction: any) => {
+                    if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                      reactions[reaction.reaction_type as keyof typeof reactions]++
+                    }
+                  })
+                }
 
-              return {
-                id: item.id,
-                content: item.content,
-                created_at: item.created_at,
-                teacher: item.teachers,
-                class: item.classes,
-                image_url: item.image_url,
-                file_url: item.file_url,
-                file_name: item.file_name,
-                reactions,
-                userReactions: userReactionTypes
-              }
-            })
-          )
+                // Get user's reactions
+                const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+                return {
+                  id: item.id,
+                  content: item.content,
+                  created_at: item.created_at,
+                  teacher: item.teachers,
+                  class: item.classes,
+                  image_url: item.image_url,
+                  file_url: item.file_url,
+                  file_name: item.file_name,
+                  reactions,
+                  userReactions: userReactionTypes
+                }
+              })
+            )
+          } else {
+            // Get the IDs of posts that are tagged with students
+            const studentTaggedPostIds = studentTaggedPosts?.map(tag => tag.post_id) || []
+
+            // Filter out student posts from announcements
+            const classAnnouncementsOnly = (announcementsData || []).filter(
+              post => !studentTaggedPostIds.includes(post.id)
+            )
+
+            // Transform announcements data and fetch reactions using classAnnouncementsOnly
+            allClassAnnouncements = await Promise.all(
+              (classAnnouncementsOnly || []).map(async (item: any) => {
+                // Get reaction counts for this announcement
+                const { data: reactionCounts, error: reactionCountsError } = await supabase
+                  .from('post_reactions')
+                  .select('reaction_type')
+                  .eq('post_id', item.id)
+
+                // Get user's reactions for this announcement
+                const { data: userReactions, error: userReactionsError } = await supabase
+                  .from('post_reactions')
+                  .select('reaction_type')
+                  .eq('post_id', item.id)
+                  .eq('parent_id', user.id)
+
+                // Calculate reaction counts
+                const reactions = {
+                  thumbs_up: 0,
+                  heart: 0,
+                  clap: 0,
+                  smile: 0
+                }
+
+                if (!reactionCountsError && reactionCounts) {
+                  reactionCounts.forEach((reaction: any) => {
+                    if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                      reactions[reaction.reaction_type as keyof typeof reactions]++
+                    }
+                  })
+                }
+
+                // Get user's reactions
+                const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+                return {
+                  id: item.id,
+                  content: item.content,
+                  created_at: item.created_at,
+                  teacher: item.teachers,
+                  class: item.classes,
+                  image_url: item.image_url,
+                  file_url: item.file_url,
+                  file_name: item.file_name,
+                  reactions,
+                  userReactions: userReactionTypes
+                }
+              })
+            )
+          }
         }
       }
 
       setClassAnnouncements(allClassAnnouncements)
 
       // Calculate stats
-      const uniqueClasses = new Set(studentsData.map(s => s.class_id).filter(Boolean))
+      const uniqueClasses = new Set(allClassIds)
       setStats({
         children: studentsData.length,
         classes: uniqueClasses.size,
@@ -710,7 +860,29 @@ export default function ParentDashboard() {
                         </Link>
                       </div>
                       
-                      {student.class ? (
+                      {student.classes && student.classes.length > 0 ? (
+                        <div className="space-y-2">
+                          <div className="flex items-center space-x-2">
+                            <BookOpen className="w-4 h-4 text-gray-500" />
+                            <span className="text-sm text-gray-600">Classes:</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            {student.classes.map((classItem, index) => (
+                              <div key={classItem.id} className="flex items-center space-x-2">
+                                <Badge variant="secondary">{classItem.name}</Badge>
+                                {classItem.teacher && (
+                                  <span className="text-xs text-gray-500">
+                                    ({classItem.teacher.name})
+                                  </span>
+                                )}
+                                {index < student.classes!.length - 1 && (
+                                  <span className="text-xs text-gray-400">•</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ) : student.class ? (
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
                             <BookOpen className="w-4 h-4 text-gray-500" />
@@ -775,6 +947,11 @@ export default function ParentDashboard() {
                           {post.student && (
                             <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                               {post.student.name}
+                            </span>
+                          )}
+                          {post.class && (
+                            <span className="text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                              {post.class.name}
                             </span>
                           )}
                         </div>
