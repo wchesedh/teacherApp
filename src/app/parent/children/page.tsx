@@ -24,6 +24,7 @@ interface Child {
   id_number?: string
   created_at: string
   class_id: string | null
+  avatar_url?: string
   class?: Class
   allClasses?: Class[]
 }
@@ -88,7 +89,7 @@ export default function ParentChildrenPage() {
       // Fetch students first
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select('id, name, id_number, created_at')
+        .select('id, name, id_number, created_at, avatar_url')
         .in('id', studentIds)
 
       if (studentsError) {
@@ -157,6 +158,7 @@ export default function ParentChildrenPage() {
           name: student.name,
           id_number: student.id_number,
           created_at: student.created_at,
+          avatar_url: student.avatar_url,
           class_id: primaryClass?.id || null,
           class: primaryClass ? {
             id: primaryClass.id,
@@ -234,9 +236,17 @@ export default function ParentChildrenPage() {
                 <CardHeader>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <GraduationCap className="w-5 h-5 text-blue-600" />
-                      </div>
+                      {child.avatar_url ? (
+                        <img 
+                          src={child.avatar_url} 
+                          alt={`${child.name} avatar`} 
+                          className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <GraduationCap className="w-5 h-5 text-blue-600" />
+                        </div>
+                      )}
                       <div>
                         <CardTitle className="text-lg">{child.name}</CardTitle>
                         <CardDescription>

@@ -203,14 +203,15 @@ export default function ParentDashboard() {
 
                 if (singleClassError) {
                   console.error('Error fetching single class for student:', sp.students.id, singleClassError)
-                  return {
-                    id: sp.students.id,
-                    name: sp.students.name,
-                    class_id: sp.students.class_id,
-                    created_at: sp.students.created_at,
-                    class: null,
-                    classes: []
-                  }
+                                  return {
+                  id: sp.students.id,
+                  name: sp.students.name,
+                  class_id: sp.students.class_id,
+                  created_at: sp.students.created_at,
+                  avatar_url: sp.students.avatar_url,
+                  class: undefined,
+                  classes: []
+                }
                 }
 
                 return {
@@ -218,6 +219,7 @@ export default function ParentDashboard() {
                   name: sp.students.name,
                   class_id: sp.students.class_id,
                   created_at: sp.students.created_at,
+                  avatar_url: sp.students.avatar_url,
                   class: singleClassData,
                   classes: singleClassData ? [singleClassData] : []
                 }
@@ -230,7 +232,8 @@ export default function ParentDashboard() {
                 name: sp.students.name,
                 class_id: sp.students.class_id,
                 created_at: sp.students.created_at,
-                class: classes[0] || null, // Keep for backward compatibility
+                avatar_url: sp.students.avatar_url,
+                class: classes[0] || undefined, // Keep for backward compatibility
                 classes: classes
               }
             })
