@@ -41,6 +41,7 @@ interface Class {
 interface Student {
   id: string
   name: string
+  id_number?: string
   class_id: string
   created_at: string
   parents?: Parent[]
@@ -440,7 +441,7 @@ export default function TeacherDashboard() {
     }
   }
 
-  const handleAddStudent = async (studentData: { name: string; class_id: string; parent_id: string }) => {
+  const handleAddStudent = async (studentData: { first_name: string; last_name: string; middle_name?: string; suffix?: string; id_number?: string; class_id: string; parent_id: string }) => {
     try {
       // Verify the class belongs to this teacher
       const { data: classData, error: classError } = await supabase
@@ -455,17 +456,25 @@ export default function TeacherDashboard() {
         return
       }
 
-      // First add the student
+      // First add the student - using old name field for now until schema is updated
+      const studentDataToInsert: any = {
+        name: `${studentData.first_name} ${studentData.last_name}`.trim(),
+        class_id: studentData.class_id
+      }
+      
+      // Only add id_number if it's provided and not empty
+      if (studentData.id_number && studentData.id_number.trim()) {
+        studentDataToInsert.id_number = studentData.id_number.trim()
+      }
+      
       const { data: studentResult, error: studentError } = await supabase
         .from('students')
-        .insert([{
-          name: studentData.name,
-          class_id: studentData.class_id
-        }])
+        .insert([studentDataToInsert])
         .select()
 
       if (studentError) {
         console.error('Error adding student:', studentError)
+        console.error('Student data being inserted:', studentDataToInsert)
         toast.error('Error creating student: ' + studentError.message)
         return
       }
@@ -816,13 +825,14 @@ export default function TeacherDashboard() {
                                  <div className="flex items-center justify-between">
                                    <div>
                                      <h4 className="font-medium">{student.name}</h4>
-                                     {student.parents && student.parents.length > 0 ? (
-                                       <div className="text-sm text-gray-500 mt-1">
-                                         Parents: {student.parents.map(p => p.name).join(', ')}
-                                       </div>
-                                     ) : (
-                                       <div className="text-sm text-gray-400 mt-1">No parents assigned</div>
-                                     )}
+                                     <div className="text-sm text-gray-500 mt-1">
+                                       {student.id_number && <span className="mr-2">ID: {student.id_number}</span>}
+                                       {student.parents && student.parents.length > 0 ? (
+                                         <span>Parents: {student.parents.map(p => p.name).join(', ')}</span>
+                                       ) : (
+                                         <span className="text-gray-400">No parents assigned</span>
+                                       )}
+                                     </div>
                                    </div>
                                    <div className="flex gap-2">
                                      <Link href={`/teacher/students/${student.id}`}>
@@ -1002,12 +1012,16 @@ function AddStudentForm({
   classes,
   onParentCreated
 }: { 
-  onSubmit: (data: { name: string; class_id: string; parent_id: string }) => void
+  onSubmit: (data: { first_name: string; last_name: string; middle_name?: string; suffix?: string; id_number?: string; class_id: string; parent_id: string }) => void
   selectedClassId: string
   classes: Class[]
   onParentCreated?: (credentials: { email: string; password: string }) => void
 }) {
-  const [name, setName] = useState('')
+  const [firstName, setFirstName] = useState('')
+  const [lastName, setLastName] = useState('')
+  const [middleName, setMiddleName] = useState('')
+  const [suffix, setSuffix] = useState('')
+  const [idNumber, setIdNumber] = useState('')
   const [classId, setClassId] = useState(selectedClassId)
   const [parentId, setParentId] = useState('')
   const [parents, setParents] = useState<Parent[]>([])
@@ -1042,8 +1056,8 @@ function AddStudentForm({
     e.preventDefault()
     
     // Validate form
-    if (!name.trim()) {
-      toast.error('Please enter a student name')
+    if (!firstName.trim() || !lastName.trim()) {
+      toast.error('Please enter both first name and last name')
       return
     }
     
@@ -1091,7 +1105,11 @@ function AddStudentForm({
           if (useExisting) {
             // Use existing parent
             await onSubmit({ 
-              name: name.trim(), 
+              first_name: firstName.trim(), 
+              last_name: lastName.trim(),
+              middle_name: middleName.trim() || undefined,
+              suffix: suffix.trim() || undefined,
+              id_number: idNumber.trim() || undefined,
               class_id: classId, 
               parent_id: existingParent.id 
             })
@@ -1099,7 +1117,11 @@ function AddStudentForm({
             setNewParentName('')
             setNewParentEmail('')
             setNewParentPassword('')
-            setName('')
+            setFirstName('')
+            setLastName('')
+            setMiddleName('')
+            setSuffix('')
+            setIdNumber('')
             setParentId('')
             setLoading(false)
             return
@@ -1144,7 +1166,11 @@ function AddStudentForm({
           if (result.success && result.parent) {
             // Now add the student with the new parent
             await onSubmit({ 
-              name: name.trim(), 
+              first_name: firstName.trim(), 
+              last_name: lastName.trim(),
+              middle_name: middleName.trim() || undefined,
+              suffix: suffix.trim() || undefined,
+              id_number: idNumber.trim() || undefined,
               class_id: classId, 
               parent_id: result.parent.id 
             })
@@ -1152,7 +1178,11 @@ function AddStudentForm({
             setNewParentName('')
             setNewParentEmail('')
             setNewParentPassword('')
-            setName('')
+            setFirstName('')
+            setLastName('')
+            setMiddleName('')
+            setSuffix('')
+            setIdNumber('')
             setParentId('')
             setLoading(false)
             
@@ -1190,8 +1220,20 @@ function AddStudentForm({
       }
       
       setLoading(true)
-      await onSubmit({ name: name.trim(), class_id: classId, parent_id: parentId })
-      setName('')
+      await onSubmit({ 
+        first_name: firstName.trim(), 
+        last_name: lastName.trim(),
+        middle_name: middleName.trim() || undefined,
+        suffix: suffix.trim() || undefined,
+        id_number: idNumber.trim() || undefined,
+        class_id: classId, 
+        parent_id: parentId 
+      })
+      setFirstName('')
+      setLastName('')
+      setMiddleName('')
+      setSuffix('')
+      setIdNumber('')
       setParentId('')
       setLoading(false)
     }
@@ -1202,13 +1244,54 @@ function AddStudentForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-4">
       <div className="space-y-2">
-        <Label htmlFor="name">Student Name *</Label>
+        <Label htmlFor="firstName">First Name *</Label>
         <Input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          placeholder="Enter student name"
+          id="firstName"
+          value={firstName}
+          onChange={(e) => setFirstName(e.target.value)}
+          placeholder="Enter first name"
           required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="lastName">Last Name *</Label>
+        <Input
+          id="lastName"
+          value={lastName}
+          onChange={(e) => setLastName(e.target.value)}
+          placeholder="Enter last name"
+          required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="middleName">Middle Name</Label>
+        <Input
+          id="middleName"
+          value={middleName}
+          onChange={(e) => setMiddleName(e.target.value)}
+          placeholder="Enter middle name (optional)"
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="suffix">Suffix</Label>
+        <Input
+          id="suffix"
+          value={suffix}
+          onChange={(e) => setSuffix(e.target.value)}
+          placeholder="Enter suffix (e.g., Jr., Sr., III) (optional)"
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="idNumber">ID Number</Label>
+        <Input
+          id="idNumber"
+          value={idNumber}
+          onChange={(e) => setIdNumber(e.target.value)}
+          placeholder="Enter student ID number (optional)"
         />
       </div>
       

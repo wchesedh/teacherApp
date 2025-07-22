@@ -44,6 +44,7 @@ interface Student {
   last_name: string
   suffix?: string
   name?: string
+  id_number?: string
   class_id: string
   created_at: string
   avatar_url?: string
@@ -127,6 +128,7 @@ export default function StudentProfilePage() {
     middle_name: '',
     last_name: '',
     suffix: '',
+    id_number: '',
     bio: '',
     grade: '',
     age: ''
@@ -203,6 +205,7 @@ export default function StudentProfilePage() {
         middle_name: studentData.middle_name || '',
         last_name: studentData.last_name || '',
         suffix: studentData.suffix || '',
+        id_number: studentData.id_number || '',
         bio: studentData.bio || '',
         grade: studentData.grade || '',
         age: studentData.age?.toString() || ''
@@ -369,6 +372,7 @@ export default function StudentProfilePage() {
           middle_name: editForm.middle_name || undefined,
           last_name: editForm.last_name,
           suffix: editForm.suffix || undefined,
+          id_number: editForm.id_number || undefined,
           bio: editForm.bio || undefined,
           grade: editForm.grade || undefined,
           age: editForm.age ? parseInt(editForm.age) : undefined
@@ -388,6 +392,7 @@ export default function StudentProfilePage() {
         middle_name: editForm.middle_name || undefined,
         last_name: editForm.last_name,
         suffix: editForm.suffix || undefined,
+        id_number: editForm.id_number || undefined,
         bio: editForm.bio || undefined,
         grade: editForm.grade || undefined,
         age: editForm.age ? parseInt(editForm.age) : undefined
@@ -738,6 +743,18 @@ export default function StudentProfilePage() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <Input
+                            placeholder="ID Number (optional)"
+                            value={editForm.id_number}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
+                          />
+                          <Input
+                            placeholder="Grade (optional)"
+                            value={editForm.grade}
+                            onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
                             placeholder="Grade (optional)"
                             value={editForm.grade}
                             onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
@@ -773,8 +790,11 @@ export default function StudentProfilePage() {
                         {student.bio && (
                           <p className="text-sm text-gray-500 mt-1">{student.bio}</p>
                         )}
-                        {(student.grade || student.age) && (
+                        {(student.grade || student.age || student.id_number) && (
                           <div className="flex items-center space-x-2 mt-1">
+                            {student.id_number && (
+                              <Badge variant="default">ID: {student.id_number}</Badge>
+                            )}
                             {student.grade && (
                               <Badge variant="secondary">{student.grade}</Badge>
                             )}

@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation'
 interface Child {
   id: string
   name: string
+  id_number?: string
   created_at: string
   class_id: string | null
   class?: Class
@@ -88,6 +89,7 @@ export default function ParentChildrenPage() {
         .select(`
           id,
           name,
+          id_number,
           created_at,
           class_id,
           classes (
@@ -114,6 +116,7 @@ export default function ParentChildrenPage() {
       const transformedChildren = (childrenData || []).map((child: any) => ({
         id: child.id,
         name: child.name,
+        id_number: child.id_number,
         created_at: child.created_at,
         class_id: child.class_id,
         class: child.classes ? {
@@ -191,6 +194,7 @@ export default function ParentChildrenPage() {
                       <div>
                         <CardTitle className="text-lg">{child.name}</CardTitle>
                         <CardDescription>
+                          {child.id_number && <span className="mr-2">ID: {child.id_number}</span>}
                           Joined {new Date(child.created_at).toLocaleDateString()}
                         </CardDescription>
                       </div>

@@ -41,6 +41,7 @@ interface Student {
   last_name: string
   suffix?: string
   name?: string
+  id_number?: string
   class_id: string
   created_at: string
   avatar_url?: string
@@ -102,6 +103,7 @@ export default function ParentStudentProfilePage() {
     middle_name: '',
     last_name: '',
     suffix: '',
+    id_number: '',
     bio: '',
     grade: '',
     age: ''
@@ -150,6 +152,7 @@ export default function ParentStudentProfilePage() {
         middle_name: studentData.middle_name || '',
         last_name: studentData.last_name || '',
         suffix: studentData.suffix || '',
+        id_number: studentData.id_number || '',
         bio: studentData.bio || '',
         grade: studentData.grade || '',
         age: studentData.age?.toString() || ''
@@ -396,6 +399,7 @@ export default function ParentStudentProfilePage() {
           middle_name: editForm.middle_name,
           last_name: editForm.last_name,
           suffix: editForm.suffix,
+          id_number: editForm.id_number,
           bio: editForm.bio,
           grade: editForm.grade,
           age: editForm.age ? parseInt(editForm.age) : null
@@ -408,7 +412,11 @@ export default function ParentStudentProfilePage() {
         return
       }
 
-      setStudent(prev => prev ? { ...prev, ...editForm, age: editForm.age ? parseInt(editForm.age) : null } : null)
+      setStudent(prev => prev ? { 
+        ...prev, 
+        ...editForm, 
+        age: editForm.age ? parseInt(editForm.age) : null 
+      } : null)
       setEditMode(false)
       toast.success('Profile updated successfully!')
 
@@ -676,6 +684,17 @@ export default function ParentStudentProfilePage() {
                           placeholder="Enter suffix (e.g., Jr., Sr., III) (optional)"
                         />
                       </div>
+
+                      <div>
+                        <Label htmlFor="id_number">ID Number</Label>
+                        <Input
+                          id="id_number"
+                          value={editForm.id_number}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter student ID number (optional)"
+                        />
+                      </div>
                     </>
                   )}
 
@@ -701,6 +720,27 @@ export default function ParentStudentProfilePage() {
                       />
                     ) : (
                       <p className="text-gray-600 mt-1">{student.grade || 'Not specified'}</p>
+                    )}
+                  </div>
+
+                  <div>
+                    <Label htmlFor="id_number">ID Number</Label>
+                    {editMode ? (
+                      <Input
+                        id="id_number"
+                        value={editForm.id_number}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
+                        className="mt-1"
+                        placeholder="Enter student ID number"
+                      />
+                    ) : (
+                      <div className="mt-1">
+                        {student.id_number ? (
+                          <Badge variant="default">ID: {student.id_number}</Badge>
+                        ) : (
+                          <p className="text-gray-600">Not specified</p>
+                        )}
+                      </div>
                     )}
                   </div>
 

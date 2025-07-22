@@ -16,6 +16,7 @@ import { toast } from 'sonner'
 interface Student {
   id: string
   name: string
+  id_number?: string
   class_id: string | null
   created_at: string
 }
@@ -137,7 +138,7 @@ export default function StudentManagement() {
     student.name.toLowerCase().includes(searchTerm.toLowerCase())
   )
 
-  const handleAddStudent = async (studentData: { name: string; class_id: string; parent_id: string }) => {
+  const handleAddStudent = async (studentData: { name: string; id_number?: string; class_id: string; parent_id: string }) => {
     try {
       // Verify the class belongs to this teacher
       const { data: classData, error: classError } = await supabase
@@ -157,6 +158,7 @@ export default function StudentManagement() {
         .from('students')
         .insert([{
           name: studentData.name,
+          id_number: studentData.id_number,
           class_id: studentData.class_id
         }])
         .select()
@@ -298,6 +300,7 @@ export default function StudentManagement() {
             <TableHeader>
               <TableRow>
                 <TableHead>Name</TableHead>
+                <TableHead>ID Number</TableHead>
                 <TableHead>Class</TableHead>
                 <TableHead>Created</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
@@ -306,13 +309,13 @@ export default function StudentManagement() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={5} className="text-center py-8">
                     Loading students...
                   </TableCell>
                 </TableRow>
               ) : filteredStudents.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8">
+                  <TableCell colSpan={5} className="text-center py-8">
                     No students found. Add your first student using the "Add Student" button above.
                   </TableCell>
                 </TableRow>
@@ -321,6 +324,9 @@ export default function StudentManagement() {
                   <TableRow key={student.id}>
                     <TableCell className="font-medium">
                       {student.name}
+                    </TableCell>
+                    <TableCell>
+                      {student.id_number || 'Not assigned'}
                     </TableCell>
                     <TableCell>
                       {getClassName(student.class_id)}
@@ -371,11 +377,12 @@ function AddStudentForm({
   classes, 
   parents 
 }: { 
-  onSubmit: (data: { name: string; class_id: string; parent_id: string }) => void
+  onSubmit: (data: { name: string; id_number?: string; class_id: string; parent_id: string }) => void
   classes: Class[]
   parents: Parent[]
 }) {
   const [name, setName] = useState('')
+  const [idNumber, setIdNumber] = useState('')
   const [classId, setClassId] = useState('')
   const [parentId, setParentId] = useState('')
   const [loading, setLoading] = useState(false)
@@ -384,9 +391,10 @@ function AddStudentForm({
     e.preventDefault()
     setLoading(true)
     
-    await onSubmit({ name, class_id: classId, parent_id: parentId })
+    await onSubmit({ name, id_number: idNumber || undefined, class_id: classId, parent_id: parentId })
     
     setName('')
+    setIdNumber('')
     setClassId('')
     setParentId('')
     setLoading(false)
@@ -404,6 +412,17 @@ function AddStudentForm({
           onChange={(e) => setName(e.target.value)}
           placeholder="Enter student's name"
           required
+        />
+      </div>
+      <div className="space-y-2">
+        <label htmlFor="id_number" className="text-sm font-medium">
+          ID Number (Optional)
+        </label>
+        <Input
+          id="id_number"
+          value={idNumber}
+          onChange={(e) => setIdNumber(e.target.value)}
+          placeholder="Enter student ID number"
         />
       </div>
       <div className="space-y-2">
