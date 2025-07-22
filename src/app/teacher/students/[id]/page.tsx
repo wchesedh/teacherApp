@@ -692,9 +692,7 @@ export default function StudentProfilePage({
       if (uploadError) {
         console.error('Upload error details:', {
           message: uploadError.message,
-          name: uploadError.name,
-          details: uploadError.details,
-          hint: uploadError.hint
+          name: uploadError.name
         })
         
         if (uploadError.message?.includes('bucket') || uploadError.message?.includes('not found')) {
