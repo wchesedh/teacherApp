@@ -2,6 +2,7 @@
 
 import { useParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { use } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -95,10 +96,16 @@ interface Post {
   }
 }
 
-export default function StudentProfilePage() {
+export default function StudentProfilePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ classId?: string }>
+}) {
   const params = useParams()
   const { user, loading: authLoading } = useAuth()
   const studentId = params.id as string
+  const resolvedSearchParams = use(searchParams)
+  const classIdFromUrl = resolvedSearchParams.classId
   
   const [student, setStudent] = useState<Student | null>(null)
   const [classInfo, setClassInfo] = useState<Class | null>(null)
@@ -118,6 +125,7 @@ export default function StudentProfilePage() {
   const [editMode, setEditMode] = useState(false)
   const [showAvatarDialog, setShowAvatarDialog] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
+  const [isSettingClassContext, setIsSettingClassContext] = useState(false)
   const [stats, setStats] = useState({
     posts: 0,
     teachers: 0,
@@ -138,11 +146,69 @@ export default function StudentProfilePage() {
     if (studentId && user && !authLoading) {
       fetchStudentDetails()
     }
-  }, [studentId, user, authLoading])
+  }, [studentId, user, authLoading, classIdFromUrl])
+
+  const fetchStudentStats = async (studentData?: Student, classData?: Class | null) => {
+    const currentStudent = studentData || student
+    const currentClassInfo = classData || classInfo
+    
+    if (!currentStudent || !currentClassInfo) return
+
+    try {
+      // Count posts for this student in this specific class
+      const { count: postsCount, error: postsError } = await supabase
+        .from('posts')
+        .select('*', { count: 'exact', head: true })
+        .eq('teacher_id', user?.id)
+        .eq('class_id', currentClassInfo.id)
+
+      // Count classmates (students in the same class)
+      let classmatesCount = 0
+      const { count: classmatesCountResult, error: classmatesError } = await supabase
+        .from('student_class')
+        .select('*', { count: 'exact', head: true })
+        .eq('class_id', currentClassInfo.id)
+
+      if (classmatesError) {
+        // Fallback to old method if student_class table doesn't exist
+        const { count: fallbackCount } = await supabase
+          .from('students')
+          .select('*', { count: 'exact', head: true })
+          .eq('class_id', currentStudent.class_id)
+        classmatesCount = fallbackCount || 0
+      } else {
+        classmatesCount = classmatesCountResult || 0
+      }
+
+      // Count teachers for this student's class
+      let teachersCount = 0
+      const { data: classData } = await supabase
+        .from('classes')
+        .select('teacher_id')
+        .eq('id', currentClassInfo.id)
+        .not('teacher_id', 'is', null)
+        .single()
+      
+      teachersCount = classData?.teacher_id ? 1 : 0
+
+      setStats({
+        posts: postsCount || 0,
+        teachers: teachersCount || 0,
+        classmates: classmatesCount || 0
+      })
+
+    } catch (error) {
+      console.error('Error fetching student stats:', error)
+    }
+  }
 
   const fetchStudentDetails = async () => {
     try {
       setLoading(true)
+      
+      console.log('Fetching student with ID:', studentId)
+      console.log('Class ID from URL:', classIdFromUrl)
+      console.log('User ID:', user?.id)
 
       // Fetch student details
       const { data: studentData, error: studentError } = await supabase
@@ -153,24 +219,80 @@ export default function StudentProfilePage() {
 
       if (studentError) {
         console.error('Error fetching student:', studentError)
+        console.error('Student ID:', studentId)
         toast.error('Error fetching student details')
         return
       }
 
-      // Verify this student belongs to one of the teacher's classes
-      const { data: classData, error: classError } = await supabase
-        .from('classes')
-        .select('*')
-        .eq('id', studentData.class_id)
-        .eq('teacher_id', user?.id)
-        .single()
-
-      if (classError || !classData) {
-        toast.error('You can only view students from your own classes')
+      if (!studentData) {
+        console.error('No student data found for ID:', studentId)
+        toast.error('Student not found')
         return
       }
 
-      setClassInfo(classData)
+      console.log('Student data:', studentData)
+
+      // Get the class context from the URL - class context is required
+      if (!classIdFromUrl) {
+        console.error('No class ID provided in URL')
+        toast.error('Class context is required to view student details. Please select a class from the dashboard.')
+        return
+      }
+
+      let effectiveClassId = classIdFromUrl
+
+      console.log('Using class ID:', effectiveClassId)
+      
+      // Use the class ID
+      const { data: classData, error: classError } = await supabase
+        .from('classes')
+        .select('*')
+        .eq('id', effectiveClassId)
+        .eq('teacher_id', user?.id)
+        .single()
+
+      if (classError) {
+        console.error('Error fetching class:', classError)
+        console.error('Class ID:', effectiveClassId)
+        console.error('Teacher ID:', user?.id)
+        toast.error('Error fetching class details')
+        return
+      }
+
+      if (!classData) {
+        console.error('No class data found for ID:', effectiveClassId)
+        toast.error('Class not found or you do not have access to it')
+        return
+      }
+
+      console.log('Class data:', classData)
+
+      // Verify the student is in this class
+      console.log('Checking if student is in class...')
+      const { data: studentInClass, error: studentInClassError } = await supabase
+        .from('student_class')
+        .select('student_id')
+        .eq('student_id', studentId)
+        .eq('class_id', effectiveClassId)
+        .single()
+
+              if (studentInClassError) {
+          console.log('Student not found in student_class table, checking old method...')
+          // Fallback to old method
+          if (studentData.class_id === effectiveClassId) {
+            console.log('Student found in old class_id method')
+            setClassInfo(classData)
+          } else {
+            console.error('Student is not enrolled in this class')
+            console.error('Student class_id:', studentData.class_id)
+            console.error('Requested class_id:', effectiveClassId)
+            toast.error('Student is not enrolled in this class')
+            return
+          }
+        } else {
+          console.log('Student found in student_class table')
+          setClassInfo(classData)
+        }
 
       // Fetch student's parents
       const { data: studentParentsData, error: studentParentsError } = await supabase
@@ -216,34 +338,38 @@ export default function StudentProfilePage() {
         age: studentData.age?.toString() || ''
       })
 
-      // Fetch posts for this student
-      const { data: tagData, error: tagError } = await supabase
-        .from('post_student_tags')
-        .select('post_id')
-        .eq('student_id', studentId)
+      // Fetch posts for this student in this specific class
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('teacher_id', user?.id)
+        .eq('class_id', effectiveClassId)
+        .order('created_at', { ascending: false })
 
-      if (tagError) {
-        console.error('Error fetching post tags:', tagError)
+      if (postsError) {
+        console.error('Error fetching posts:', postsError)
         setPosts([])
-      } else if (tagData && tagData.length > 0) {
-        // Get the post IDs
-        const postIds = tagData.map(tag => tag.post_id)
-        
-        // Fetch the actual posts
-        const { data: postsData, error: postsError } = await supabase
-          .from('posts')
-          .select('*')
-          .in('id', postIds)
-          .eq('teacher_id', user?.id)
-          .order('created_at', { ascending: false })
+      } else if (postsData && postsData.length > 0) {
+        // Filter posts to only include those tagged with this student
+        const { data: tagData, error: tagError } = await supabase
+          .from('post_student_tags')
+          .select('post_id')
+          .eq('student_id', studentId)
+          .in('post_id', postsData.map(post => post.id))
 
-        if (postsError) {
-          console.error('Error fetching posts:', postsError)
+        if (tagError) {
+          console.error('Error fetching post tags:', tagError)
           setPosts([])
         } else {
+          // Get the post IDs that are tagged with this student
+          const taggedPostIds = tagData?.map(tag => tag.post_id) || []
+          
+          // Filter posts to only include those tagged with this student
+          const studentPosts = postsData.filter(post => taggedPostIds.includes(post.id))
+
           // Fetch reactions for each post
           const postsWithReactions = await Promise.all(
-            (postsData || []).map(async (post) => {
+            (studentPosts || []).map(async (post) => {
               const { data: reactionCounts, error: reactionCountsError } = await supabase
                 .from('post_reactions')
                 .select('reaction_type')
@@ -271,53 +397,19 @@ export default function StudentProfilePage() {
       }
 
       // Fetch stats after all data is loaded
-      await fetchStudentStats(studentData, classData)
+      await fetchStudentStats(studentData, classInfo)
 
     } catch (error) {
       console.error('Error fetching student details:', error)
+      console.error('Error details:', {
+        studentId,
+        classIdFromUrl,
+        userId: user?.id,
+        error: error instanceof Error ? error.message : error
+      })
       toast.error('Error fetching student details')
     } finally {
       setLoading(false)
-    }
-  }
-
-  const fetchStudentStats = async (studentData?: Student, classData?: Class | null) => {
-    const currentStudent = studentData || student
-    const currentClassInfo = classData || classInfo
-    
-    if (!currentStudent) return
-
-    try {
-      // Count posts for this student
-      const { count: postsCount, error: postsError } = await supabase
-        .from('post_student_tags')
-        .select('*', { count: 'exact', head: true })
-        .eq('student_id', currentStudent.id)
-
-      // Count classmates (students in the same class)
-      const { count: classmatesCount, error: classmatesError } = await supabase
-        .from('students')
-        .select('*', { count: 'exact', head: true })
-        .eq('class_id', currentStudent.class_id)
-
-      // Count teachers for this student's class
-      const { data: classData, error: teachersError } = await supabase
-        .from('classes')
-        .select('teacher_id')
-        .eq('id', currentStudent.class_id)
-        .not('teacher_id', 'is', null)
-        .single()
-      
-      const teachersCount = classData?.teacher_id ? 1 : 0
-
-      setStats({
-        posts: postsCount || 0,
-        teachers: teachersCount || 0,
-        classmates: classmatesCount || 0
-      })
-
-    } catch (error) {
-      console.error('Error fetching student stats:', error)
     }
   }
 
@@ -415,12 +507,13 @@ export default function StudentProfilePage() {
 
   const handleCreatePost = async (postData: { content: string; image_url?: string }) => {
     try {
-      // First, create the post
+      // First, create the post with class context
       const { data: createdPost, error: postError } = await supabase
         .from('posts')
         .insert([{
           content: postData.content,
           teacher_id: user?.id,
+          class_id: classInfo?.id, // Always include class context
           image_url: postData.image_url
         }])
         .select()
@@ -635,6 +728,8 @@ export default function StudentProfilePage() {
             </div>
           </div>
         </div>
+
+
 
         {/* Stats Cards */}
         <div className="grid gap-6 md:grid-cols-3 mb-8">
@@ -1072,10 +1167,17 @@ export default function StudentProfilePage() {
         <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
           <DialogContent>
             <DialogHeader>
-                          <DialogTitle>Create Post About {student.name}</DialogTitle>
-            <DialogDescription>
-              Share updates about {student.name}'s progress with their parents
-            </DialogDescription>
+              <DialogTitle>
+                Create Post About {student.name}
+                {classInfo && (
+                  <span className="text-sm font-normal text-gray-600 block">
+                    for {classInfo.name} Class
+                  </span>
+                )}
+              </DialogTitle>
+              <DialogDescription>
+                Share updates about {student.name}'s progress in {classInfo?.name || 'this'} class with their parents
+              </DialogDescription>
             </DialogHeader>
             <CreatePostForm 
               onSubmit={handleCreatePost}

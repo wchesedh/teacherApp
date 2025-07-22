@@ -139,27 +139,69 @@ export default function TeacherParentsPage() {
       // Fetch students for each parent
       const parentsWithStudents = await Promise.all(
         (parentsData || []).map(async (parent) => {
-          const { data: parentStudentsData, error: parentStudentsError } = await supabase
-            .from('student_parent')
-            .select(`
-              student_id,
-              students (
-                id,
-                name,
-                class_id,
-                created_at,
-                classes (
+          try {
+            // First try the new student_parent table
+            const { data: parentStudentsData, error: parentStudentsError } = await supabase
+              .from('student_parent')
+              .select(`
+                student_id,
+                students (
                   id,
                   name,
-                  teacher_id
+                  class_id,
+                  created_at,
+                  classes (
+                    id,
+                    name,
+                    teacher_id
+                  )
                 )
-              )
-            `)
-            .eq('parent_id', parent.id)
+              `)
+              .eq('parent_id', parent.id)
 
           if (parentStudentsError) {
             console.error('Error fetching students for parent:', parent.id, parentStudentsError)
-            return { ...parent, students: [] }
+            console.error('Error details:', {
+              parentId: parent.id,
+              error: parentStudentsError
+            })
+            
+            // Try fallback to old method if student_parent table doesn't exist
+            try {
+              console.log('Trying fallback method for parent:', parent.id)
+              const { data: fallbackStudentsData, error: fallbackError } = await supabase
+                .from('students')
+                .select(`
+                  id,
+                  name,
+                  class_id,
+                  created_at,
+                  classes (
+                    id,
+                    name,
+                    teacher_id
+                  )
+                `)
+                .eq('parent_id', parent.id)
+
+              if (fallbackError) {
+                console.error('Fallback also failed:', fallbackError)
+                return { ...parent, students: [] }
+              }
+
+              const students = fallbackStudentsData?.map((student: any) => ({
+                id: student.id,
+                name: student.name,
+                class_id: student.class_id,
+                created_at: student.created_at,
+                class: student.classes
+              })) || []
+
+              return { ...parent, students }
+            } catch (fallbackError) {
+              console.error('Fallback method also failed:', fallbackError)
+              return { ...parent, students: [] }
+            }
           }
 
           const students = parentStudentsData?.map((sp: any) => ({
@@ -171,6 +213,10 @@ export default function TeacherParentsPage() {
           })) || []
 
           return { ...parent, students }
+          } catch (error) {
+            console.error('Error processing parent:', parent.id, error)
+            return { ...parent, students: [] }
+          }
         })
       )
 

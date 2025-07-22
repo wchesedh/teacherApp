@@ -114,9 +114,75 @@ export default function TeacherAnnouncementsPage() {
         return
       }
 
+      // Filter out posts that are tagged with specific students (student posts)
+      const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+        .from('post_student_tags')
+        .select('post_id')
+        .in('post_id', (announcementsData || []).map(post => post.id))
+
+      if (studentTagsError) {
+        console.error('Error fetching student tags:', studentTagsError)
+        // If we can't fetch student tags, show all posts as announcements
+        const announcementsWithReactions = await Promise.all(
+          (announcementsData || []).map(async (item: any) => {
+            // Get reaction counts for this announcement
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', item.id)
+
+            // Calculate reaction counts
+            const reactions = {
+              thumbs_up: 0,
+              heart: 0,
+              clap: 0,
+              smile: 0
+            }
+
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+
+            return {
+              id: item.id,
+              content: item.content,
+              created_at: item.created_at,
+              teacher: item.teachers,
+              class: item.classes,
+              image_url: item.image_url,
+              file_url: item.file_url,
+              file_name: item.file_name,
+              reactions,
+              userReactions: []
+            }
+          })
+        )
+
+        setAnnouncements(announcementsWithReactions)
+        return
+      }
+
+      // Get the IDs of posts that are tagged with students
+      const studentTaggedPostIds = studentTaggedPosts?.map(tag => tag.post_id) || []
+
+      // Filter out student posts from announcements
+      const classAnnouncementsOnly = (announcementsData || []).filter(
+        post => !studentTaggedPostIds.includes(post.id)
+      )
+
+      if (announcementsError) {
+        console.error('Error fetching class announcements:', announcementsError)
+        setAnnouncements([])
+        return
+      }
+
       // Transform announcements data and fetch reactions
       const announcementsWithReactions = await Promise.all(
-        (announcementsData || []).map(async (item: any) => {
+        (classAnnouncementsOnly || []).map(async (item: any) => {
           // Get reaction counts for this announcement
           const { data: reactionCounts, error: reactionCountsError } = await supabase
             .from('post_reactions')
