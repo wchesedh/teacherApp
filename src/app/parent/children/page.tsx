@@ -25,6 +25,7 @@ interface Child {
   created_at: string
   class_id: string | null
   class?: Class
+  allClasses?: Class[]
 }
 
 interface Class {
@@ -82,50 +83,95 @@ export default function ParentChildrenPage() {
       }
 
       const studentIds = studentParentsData.map(sp => sp.student_id)
+      console.log('Student IDs to fetch:', studentIds)
 
-      // Fetch children with their class information
-      const { data: childrenData, error: childrenError } = await supabase
+      // Fetch students first
+      const { data: studentsData, error: studentsError } = await supabase
         .from('students')
-        .select(`
-          id,
-          name,
-          id_number,
-          created_at,
-          class_id,
-          classes (
-            id,
-            name,
-            teacher_id,
-            teachers (
-              id,
-              name,
-              email
-            )
-          )
-        `)
+        .select('id, name, id_number, created_at')
         .in('id', studentIds)
-        .order('created_at', { ascending: false })
 
-      if (childrenError) {
-        console.error('Error fetching children:', childrenError)
+      if (studentsError) {
+        console.error('Error fetching students:', studentsError)
         toast.error('Error fetching children')
         return
       }
 
-      // Transform the data to flatten the nested structure
-      const transformedChildren = (childrenData || []).map((child: any) => ({
-        id: child.id,
-        name: child.name,
-        id_number: child.id_number,
-        created_at: child.created_at,
-        class_id: child.class_id,
-        class: child.classes ? {
-          id: child.classes.id,
-          name: child.classes.name,
-          teacher_id: child.classes.teacher_id,
-          teacher: child.classes.teachers
-        } : undefined
-      }))
+      // Fetch class relationships for these students
+      const { data: classRelationships, error: classError } = await supabase
+        .from('student_class')
+        .select('student_id, class_id')
+        .in('student_id', studentIds)
+
+      if (classError) {
+        console.error('Error fetching class relationships:', classError)
+        toast.error('Error fetching children')
+        return
+      }
+
+      // Get unique class IDs
+      const classIds = [...new Set(classRelationships?.map(cr => cr.class_id) || [])]
+      console.log('Class IDs:', classIds)
+
+      // Fetch classes with teachers
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select(`
+          id,
+          name,
+          teacher_id,
+          teachers (
+            id,
+            name,
+            email
+          )
+        `)
+        .in('id', classIds)
+
+      if (classesError) {
+        console.error('Error fetching classes:', classesError)
+        toast.error('Error fetching children')
+        return
+      }
+
+      // Create a map of class data
+      const classMap = new Map()
+      classesData?.forEach(cls => {
+        classMap.set(cls.id, cls)
+      })
+
+      // Transform the data to combine students with their classes
+      const transformedChildren = studentsData?.map((student: any) => {
+        // Find all classes for this student
+        const studentClasses = classRelationships?.filter(cr => cr.student_id === student.id) || []
+        const classData = studentClasses.map(cr => classMap.get(cr.class_id)).filter(Boolean)
+        
+        // Concatenate all class names
+        const classNames = classData.map(cls => cls.name).join(', ')
+        
+        // Use the first class for backward compatibility
+        const primaryClass = classData[0]
+        
+        return {
+          id: student.id,
+          name: student.name,
+          id_number: student.id_number,
+          created_at: student.created_at,
+          class_id: primaryClass?.id || null,
+          class: primaryClass ? {
+            id: primaryClass.id,
+            name: classNames, // Use concatenated class names
+            teacher_id: primaryClass.teacher_id,
+            teacher: primaryClass.teachers
+          } : undefined,
+          allClasses: classData // Store all classes for future use
+        }
+      }) || []
+
+      console.log('Students data:', studentsData)
+      console.log('Class relationships:', classRelationships)
+      console.log('Classes data:', classesData)
+      console.log('Transformed children data:', transformedChildren)
 
       setChildren(transformedChildren)
 
