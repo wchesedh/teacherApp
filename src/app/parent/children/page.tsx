@@ -194,7 +194,11 @@ export default function ParentChildrenPage() {
                       <div>
                         <CardTitle className="text-lg">{child.name}</CardTitle>
                         <CardDescription>
-                          {child.id_number && <span className="mr-2">ID: {child.id_number}</span>}
+                          {child.id_number && (
+                            <Badge variant="default" className="mr-2">
+                              ID: {child.id_number}
+                            </Badge>
+                          )}
                           Joined {new Date(child.created_at).toLocaleDateString()}
                         </CardDescription>
                       </div>
