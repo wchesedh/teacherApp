@@ -48,6 +48,7 @@ interface Student {
   bio?: string
   grade?: string
   age?: number | null
+  classes?: Class[]
 }
 
 interface Class {
@@ -88,6 +89,8 @@ export default function ParentStudentProfilePage() {
   
   const [student, setStudent] = useState<Student | null>(null)
   const [classInfo, setClassInfo] = useState<Class | null>(null)
+  const [studentClasses, setStudentClasses] = useState<Class[]>([])
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [editMode, setEditMode] = useState(false)
@@ -115,6 +118,110 @@ export default function ParentStudentProfilePage() {
       fetchStudentDetails()
     }
   }, [studentId, user, authLoading])
+
+  const fetchPostsForClass = async (classId: string | null) => {
+    if (!classId || !user) {
+      setPosts([])
+      return
+    }
+
+    try {
+      // Fetch posts for this student in the specific class
+      const { data: tagData, error: tagError } = await supabase
+        .from('post_student_tags')
+        .select(`
+          post_id,
+          posts (
+            id,
+            content,
+            created_at,
+            class_id,
+            teachers (
+              id,
+              first_name,
+              middle_name,
+              last_name,
+              suffix,
+              name,
+              email
+            )
+          )
+        `)
+        .eq('student_id', studentId)
+        .eq('posts.class_id', classId)
+
+      if (tagError) {
+        console.error('Error fetching post tags:', tagError)
+        setPosts([])
+      } else if (tagData && tagData.length > 0) {
+        // Transform posts data and fetch reactions
+        const postsWithReactions = await Promise.all(
+          tagData
+            .filter((item: any) => item.posts && item.posts.id) // Filter out null posts
+            .map(async (item: any) => {
+              // Get reaction counts for this post
+              const { data: reactionCounts, error: reactionCountsError } = await supabase
+                .from('post_reactions')
+                .select('reaction_type')
+                .eq('post_id', item.posts.id)
+
+              // Calculate reaction counts
+              const reactions = {
+                thumbs_up: 0,
+                heart: 0,
+                clap: 0,
+                smile: 0
+              }
+
+              if (!reactionCountsError && reactionCounts) {
+                reactionCounts.forEach((reaction: any) => {
+                  if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                    reactions[reaction.reaction_type as keyof typeof reactions]++
+                  }
+                })
+              }
+
+              // Get user's reactions for this post
+              const { data: userReactions, error: userReactionsError } = await supabase
+                .from('post_reactions')
+                .select('reaction_type')
+                .eq('post_id', item.posts.id)
+                .eq('parent_id', user.id)
+
+              const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+              return {
+                id: item.posts.id,
+                content: item.posts.content,
+                created_at: item.posts.created_at,
+                teacher: item.posts.teachers,
+                reactions,
+                userReactions: userReactionTypes
+              }
+            })
+        )
+        
+        setPosts(postsWithReactions)
+      } else {
+        setPosts([])
+      }
+    } catch (error) {
+      console.error('Error fetching posts for class:', error)
+      setPosts([])
+    }
+  }
+
+  const handleClassSelection = async (classId: string) => {
+    if (!user) return
+    
+    setSelectedClassId(classId)
+    const selectedClass = studentClasses.find(c => c.id === classId)
+    setClassInfo(selectedClass || null)
+    await fetchPostsForClass(classId)
+    if (student) {
+      await fetchStudentStats(student, selectedClass || null)
+    }
+  }
 
   const fetchStudentDetails = async () => {
     try {
@@ -163,109 +270,100 @@ export default function ParentStudentProfilePage() {
         age: studentData.age?.toString() || ''
       })
 
-      // Fetch class information
+      // Fetch all classes for this student
       let classData: Class | null = null
-      if (studentData.class_id) {
-        const { data: classResult, error: classError } = await supabase
-          .from('classes')
+      let allClasses: Class[] = []
+      
+      try {
+        // First try to get all classes using student_class table
+        const { data: studentClassesData, error: studentClassesError } = await supabase
+          .from('student_class')
           .select(`
-            *,
-            teachers (
+            classes!student_class_class_id_fkey (
               id,
-              first_name,
-              middle_name,
-              last_name,
-              suffix,
               name,
-              email
+              teacher_id,
+              teachers!classes_teacher_id_fkey (
+                id,
+                first_name,
+                middle_name,
+                last_name,
+                suffix,
+                name,
+                email
+              )
             )
           `)
-          .eq('id', studentData.class_id)
-          .single()
+          .eq('student_id', studentId)
 
-        if (classError) {
-          console.error('Error fetching class:', classError)
+        if (studentClassesError) {
+          console.error('Error fetching student classes:', studentClassesError)
+          // Fallback to single class
+          if (studentData.class_id) {
+            const { data: singleClassResult, error: singleClassError } = await supabase
+              .from('classes')
+              .select(`
+                *,
+                teachers (
+                  id,
+                  first_name,
+                  middle_name,
+                  last_name,
+                  suffix,
+                  name,
+                  email
+                )
+              `)
+              .eq('id', studentData.class_id)
+              .single()
+
+            if (singleClassError) {
+              console.error('Error fetching single class:', singleClassError)
+            } else {
+              classData = singleClassResult
+              allClasses = [singleClassResult]
+              setClassInfo(singleClassResult)
+            }
+          }
         } else {
-          classData = classResult
-          setClassInfo(classResult)
+          allClasses = studentClassesData?.map((sc: any) => sc.classes).filter(Boolean) || []
+          classData = allClasses[0] || null
+          setClassInfo(classData)
+        }
+      } catch (error) {
+        console.error('Error processing student classes:', error)
+        // Fallback to single class
+        if (studentData.class_id) {
+          const { data: singleClassResult, error: singleClassError } = await supabase
+            .from('classes')
+            .select(`
+              *,
+              teachers (
+                id,
+                first_name,
+                middle_name,
+                last_name,
+                suffix,
+                name,
+                email
+              )
+            `)
+            .eq('id', studentData.class_id)
+            .single()
+
+          if (!singleClassError && singleClassResult) {
+            classData = singleClassResult
+            allClasses = [singleClassResult]
+            setClassInfo(singleClassResult)
+          }
         }
       }
 
-      // Fetch posts for this student
-      const { data: tagData, error: tagError } = await supabase
-        .from('post_student_tags')
-        .select(`
-          post_id,
-          posts (
-            id,
-            content,
-            created_at,
-            teachers (
-              id,
-              first_name,
-              middle_name,
-              last_name,
-              suffix,
-              name,
-              email
-            )
-          )
-        `)
-        .eq('student_id', studentId)
+      setStudentClasses(allClasses)
+      setSelectedClassId(allClasses[0]?.id || null)
 
-      if (tagError) {
-        console.error('Error fetching post tags:', tagError)
-        setPosts([])
-      } else if (tagData && tagData.length > 0) {
-        // Transform posts data and fetch reactions
-        const postsWithReactions = await Promise.all(
-          tagData.map(async (item: any) => {
-            // Get reaction counts for this post
-            const { data: reactionCounts, error: reactionCountsError } = await supabase
-              .from('post_reactions')
-              .select('reaction_type')
-              .eq('post_id', item.posts.id)
-
-            // Calculate reaction counts
-            const reactions = {
-              thumbs_up: 0,
-              heart: 0,
-              clap: 0,
-              smile: 0
-            }
-
-            if (!reactionCountsError && reactionCounts) {
-              reactionCounts.forEach((reaction: any) => {
-                if (reactions.hasOwnProperty(reaction.reaction_type)) {
-                  reactions[reaction.reaction_type as keyof typeof reactions]++
-                }
-              })
-            }
-
-            // Get user's reactions for this post
-            const { data: userReactions, error: userReactionsError } = await supabase
-              .from('post_reactions')
-              .select('reaction_type')
-              .eq('post_id', item.posts.id)
-              .eq('parent_id', user?.id)
-
-            const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
-
-            return {
-              id: item.posts.id,
-              content: item.posts.content,
-              created_at: item.posts.created_at,
-              teacher: item.posts.teachers,
-              reactions,
-              userReactions: userReactionTypes
-            }
-          })
-        )
-        
-        setPosts(postsWithReactions)
-      } else {
-        setPosts([])
-      }
+      // Fetch posts for this student (will be updated when class is selected)
+      await fetchPostsForClass(allClasses[0]?.id || null)
 
       // Fetch stats after all data is loaded
       await fetchStudentStats(studentData, classData)
@@ -285,62 +383,103 @@ export default function ParentStudentProfilePage() {
     if (!currentStudent) return
 
     try {
-      // Count posts for this student
+      // Count posts for this student in the specific class
       let postsCount = 0
       let postsError = null
       
-      try {
-        const { count, error } = await supabase
-          .from('post_student_tags')
-          .select('*', { count: 'exact', head: true })
-          .eq('student_id', currentStudent.id)
-        
-        postsCount = count || 0
-        postsError = error
-      } catch (error) {
-        console.error('Error counting posts for student:', currentStudent.id, error)
-        postsCount = 0
-        postsError = error
+      if (currentClassInfo?.id) {
+        try {
+          // First get all posts for this student
+          const { data: studentPosts, error: postsQueryError } = await supabase
+            .from('post_student_tags')
+            .select(`
+              posts (
+                id,
+                class_id
+              )
+            `)
+            .eq('student_id', currentStudent.id)
+
+          if (postsQueryError) {
+            console.error('Error fetching student posts:', postsQueryError)
+            postsCount = 0
+            postsError = postsQueryError
+          } else {
+            // Filter posts by class_id and count them
+            const classPosts = studentPosts?.filter((item: any) => 
+              item.posts && item.posts.class_id === currentClassInfo.id
+            ) || []
+            postsCount = classPosts.length
+          }
+        } catch (error) {
+          console.error('Error counting posts for student in class:', currentStudent.id, currentClassInfo.id, error)
+          postsCount = 0
+          postsError = error
+        }
+      } else {
+        console.log('No class selected, setting posts count to 0')
       }
 
       // Count classmates (students in the same class)
       let classmatesCount = 0
       let classmatesError = null
       
-      if (currentStudent.class_id) {
-        const { count, error } = await supabase
-          .from('students')
-          .select('*', { count: 'exact', head: true })
-          .eq('class_id', currentStudent.class_id)
-        
-        classmatesCount = count || 0
-        classmatesError = error
+      if (currentClassInfo?.id) {
+        try {
+          // Use student_class table to get all students in this class
+          const { data: classStudents, error } = await supabase
+            .from('student_class')
+            .select(`
+              student_id,
+              students (
+                id,
+                name
+              )
+            `)
+            .eq('class_id', currentClassInfo.id)
+
+          if (error) {
+            console.error('Error fetching classmates:', error)
+            classmatesCount = 0
+            classmatesError = error
+          } else {
+            // Count all students in this class (excluding the current student)
+            const allClassStudents = classStudents?.filter((item: any) => 
+              item.students && item.student_id !== currentStudent.id
+            ) || []
+            classmatesCount = allClassStudents.length
+          }
+        } catch (error) {
+          console.error('Error counting classmates:', error)
+          classmatesCount = 0
+          classmatesError = error
+        }
       } else {
-        console.log('Student has no class_id, setting classmates count to 0')
+        console.log('No class selected, setting classmates count to 0')
       }
 
       // Count teachers for this student's class
       let teachersCount = 0
       let teachersError = null
       
-      if (currentStudent.class_id) {
+      if (currentClassInfo?.id) {
         const { data: classData, error } = await supabase
           .from('classes')
           .select('teacher_id')
-          .eq('id', currentStudent.class_id)
+          .eq('id', currentClassInfo.id)
           .not('teacher_id', 'is', null)
           .single()
         
         teachersCount = classData?.teacher_id ? 1 : 0
         teachersError = error
       } else {
-        console.log('Student has no class_id, setting teachers count to 0')
+        console.log('No class selected, setting teachers count to 0')
       }
 
       setStats({
         posts: postsCount || 0,
         teachers: teachersCount,
-        classmates: Math.max((classmatesCount || 1) - 1, 0) // Subtract 1 to exclude the student themselves, minimum 0
+        classmates: classmatesCount || 0 // Already excludes the current student in the query
       })
 
       // Log any errors for debugging
@@ -348,6 +487,7 @@ export default function ParentStudentProfilePage() {
         console.error('Error fetching posts count:', postsError)
         console.error('Posts error details:', {
           studentId: currentStudent.id,
+          classId: currentClassInfo?.id,
           error: postsError
         })
       }
@@ -355,7 +495,7 @@ export default function ParentStudentProfilePage() {
         console.error('Error fetching classmates count:', classmatesError)
         console.error('Classmates error details:', {
           studentId: currentStudent.id,
-          classId: currentStudent.class_id,
+          classId: currentClassInfo?.id,
           error: classmatesError
         })
       }
@@ -363,7 +503,7 @@ export default function ParentStudentProfilePage() {
         console.error('Error fetching teachers count:', teachersError)
         console.error('Teachers error details:', {
           studentId: currentStudent.id,
-          classId: currentStudent.class_id,
+          classId: currentClassInfo?.id,
           error: teachersError
         })
       }
@@ -1076,6 +1216,38 @@ export default function ParentStudentProfilePage() {
                 </Card>
               </div>
 
+              {/* Class Tabs */}
+              {studentClasses.length > 1 && (
+                <Card className="mb-4">
+                  <CardHeader>
+                    <CardTitle className="flex items-center space-x-2">
+                      <BookOpen className="w-5 h-5" />
+                      <span>Classes</span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="flex flex-wrap gap-2">
+                      {studentClasses.map((classItem) => (
+                        <Button
+                          key={classItem.id}
+                          variant={selectedClassId === classItem.id ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => handleClassSelection(classItem.id)}
+                          className="flex items-center space-x-2"
+                        >
+                          <span>{classItem.name}</span>
+                          {classItem.teacher && (
+                            <span className="text-xs opacity-75">
+                              ({classItem.teacher.name})
+                            </span>
+                          )}
+                        </Button>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
               {/* Class Information */}
               {classInfo && (
                 <Card>
@@ -1083,6 +1255,11 @@ export default function ParentStudentProfilePage() {
                     <CardTitle className="flex items-center space-x-2">
                       <BookOpen className="w-5 h-5" />
                       <span>Class Information</span>
+                      {studentClasses.length > 1 && (
+                        <Badge variant="secondary">
+                          {studentClasses.findIndex(c => c.id === selectedClassId) + 1} of {studentClasses.length}
+                        </Badge>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent>
