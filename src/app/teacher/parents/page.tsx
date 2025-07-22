@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
 import { 
   Users, 
@@ -16,7 +17,10 @@ import {
   EyeOff,
   Copy,
   Search,
-  Plus
+  Plus,
+  MoreHorizontal,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Layout from '@/components/Layout'
@@ -51,6 +55,9 @@ export default function TeacherParentsPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [showPasswords, setShowPasswords] = useState<{ [key: string]: boolean }>({})
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingParent, setEditingParent] = useState<Parent | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -94,19 +101,33 @@ export default function TeacherParentsPage() {
         return
       }
 
-      // Get unique parent IDs
+      // Get unique parent IDs from students
       const uniqueParentIds = [...new Set(studentParentsData?.map(sp => sp.parent_id) || [])]
 
-      if (uniqueParentIds.length === 0) {
-        setParents([])
+      // Also fetch all parents (including those without students yet)
+      // This allows teachers to see parents they've created even if they haven't been linked to students
+      const { data: allParentsData, error: allParentsError } = await supabase
+        .from('parents')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (allParentsError) {
+        console.error('Error fetching all parents:', allParentsError)
+        toast.error('Error loading parents')
         return
       }
 
-      // Fetch parent details
+      // Combine parents from students and all parents, removing duplicates
+      const allParentIds = new Set([
+        ...uniqueParentIds,
+        ...(allParentsData?.map(p => p.id) || [])
+      ])
+
+      // Fetch parent details for all parents
       const { data: parentsData, error: parentsError } = await supabase
         .from('parents')
         .select('*')
-        .in('id', uniqueParentIds)
+        .in('id', Array.from(allParentIds))
         .order('created_at', { ascending: false })
 
       if (parentsError) {
@@ -175,6 +196,158 @@ export default function TeacherParentsPage() {
     toast.success('Copied to clipboard')
   }
 
+  const handleEditParent = async (parentData: { id: string; name: string; email: string; password?: string }) => {
+    try {
+      // Check if parent with this email already exists (excluding current parent)
+      const { data: existingParent, error: checkError } = await supabase
+        .from('parents')
+        .select('*')
+        .eq('email', parentData.email.trim())
+        .neq('id', parentData.id)
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing parent:', checkError)
+        toast.error('Error checking existing parent')
+        return
+      }
+
+      if (existingParent) {
+        toast.error('A parent with this email already exists')
+        return
+      }
+
+      // Update parent data
+      const updateData: any = {
+        name: parentData.name.trim(),
+        email: parentData.email.trim()
+      }
+
+      // Only update password if provided
+      if (parentData.password && parentData.password.trim()) {
+        updateData.password = parentData.password.trim()
+      }
+
+      const { error } = await supabase
+        .from('parents')
+        .update(updateData)
+        .eq('id', parentData.id)
+
+      if (error) {
+        console.error('Error updating parent:', error)
+        toast.error('Error updating parent')
+        return
+      }
+
+      setIsEditDialogOpen(false)
+      setEditingParent(null)
+      await fetchParents() // Refresh the parents list
+      toast.success('Parent updated successfully!')
+    } catch (error) {
+      console.error('Error updating parent:', error)
+      toast.error('Error updating parent')
+    }
+  }
+
+  const handleDeleteParent = async (parentId: string) => {
+    try {
+      // Check if parent has any students linked
+      const { data: studentRelationships, error: checkError } = await supabase
+        .from('student_parent')
+        .select('student_id')
+        .eq('parent_id', parentId)
+
+      if (checkError) {
+        console.error('Error checking parent relationships:', checkError)
+        toast.error('Error checking parent relationships')
+        return
+      }
+
+      if (studentRelationships && studentRelationships.length > 0) {
+        toast.error('Cannot delete parent: This parent has students linked to them. Please unlink all students first.')
+        return
+      }
+
+      if (!confirm('Are you sure you want to delete this parent? This action cannot be undone.')) {
+        return
+      }
+
+      // Delete the parent (no relationships to delete since we checked above)
+      const { error } = await supabase
+        .from('parents')
+        .delete()
+        .eq('id', parentId)
+
+      if (error) {
+        console.error('Error deleting parent:', error)
+        toast.error('Error deleting parent')
+        return
+      }
+
+      await fetchParents() // Refresh the parents list
+      toast.success('Parent deleted successfully!')
+    } catch (error) {
+      console.error('Error deleting parent:', error)
+      toast.error('Error deleting parent')
+    }
+  }
+
+  const handleAddParent = async (parentData: { name: string; email: string; password: string }) => {
+    try {
+      // Check if parent with this email already exists
+      const { data: existingParent, error: checkError } = await supabase
+        .from('parents')
+        .select('*')
+        .eq('email', parentData.email.trim())
+        .single()
+
+      if (checkError && checkError.code !== 'PGRST116') {
+        console.error('Error checking existing parent:', checkError)
+        toast.error('Error checking existing parent')
+        return
+      }
+
+      if (existingParent) {
+        toast.error('A parent with this email already exists')
+        return
+      }
+
+      // Create parent using API endpoint
+      const response = await fetch('/api/create-parent', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: parentData.email.trim(),
+          password: parentData.password.trim(),
+          name: parentData.name.trim()
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error('API Error Response:', errorText)
+        toast.error('Error creating parent account. Please check the console for details.')
+        return
+      }
+
+      const result = await response.json()
+
+      if (result.success && result.parent) {
+        setIsAddDialogOpen(false)
+        await fetchParents() // Refresh the parents list
+        toast.success('Parent created successfully!')
+      } else {
+        console.error('API returned error:', result)
+        toast.error('Error creating parent account: ' + (result.error || 'Unknown error'))
+      }
+    } catch (error) {
+      console.error('Error creating parent:', error)
+      toast.error('Error creating parent')
+    }
+  }
+
 
 
   const filteredParents = parents.filter(parent =>
@@ -192,22 +365,263 @@ export default function TeacherParentsPage() {
               <p className="mt-2 text-gray-600">Loading parents...</p>
             </div>
           </div>
-        </div>
-      </Layout>
-    )
+              </div>
+    </Layout>
+  )
+}
+
+// Add Parent Form Component
+function AddParentForm({ 
+  onSubmit 
+}: { 
+  onSubmit: (data: { name: string; email: string; password: string }) => void
+}) {
+  const [name, setName] = useState('')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Validate form
+    if (!name.trim()) {
+      toast.error('Please enter a parent name')
+      return
+    }
+    
+    if (!email.trim()) {
+      toast.error('Please enter an email address')
+      return
+    }
+    
+    if (!password.trim()) {
+      toast.error('Please enter a password')
+      return
+    }
+    
+    if (password.length < 6) {
+      toast.error('Password must be at least 6 characters long')
+      return
+    }
+    
+    setLoading(true)
+    await onSubmit({ 
+      name: name.trim(), 
+      email: email.trim(), 
+      password: password.trim() 
+    })
+    setLoading(false)
+    
+    // Reset form
+    setName('')
+    setEmail('')
+    setPassword('')
   }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <label htmlFor="parentName" className="text-sm font-medium">
+          Parent Name *
+        </label>
+        <Input
+          id="parentName"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter parent name"
+          required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <label htmlFor="parentEmail" className="text-sm font-medium">
+          Email *
+        </label>
+        <Input
+          id="parentEmail"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter parent email"
+          required
+        />
+        <p className="text-xs text-gray-500">
+          Parents need email to log in and check their child's progress
+        </p>
+      </div>
+      
+      <div className="space-y-2">
+        <label htmlFor="parentPassword" className="text-sm font-medium">
+          Password *
+        </label>
+        <Input
+          id="parentPassword"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Enter password for parent"
+          required
+        />
+        <p className="text-xs text-gray-500">
+          Choose a password that the parent can remember easily
+        </p>
+      </div>
+      
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading ? 'Creating...' : 'Create Parent'}
+      </Button>
+    </form>
+  )
+}
+
+// Edit Parent Form Component
+function EditParentForm({ 
+  parent, 
+  onSubmit 
+}: { 
+  parent: Parent
+  onSubmit: (data: { id: string; name: string; email: string; password?: string }) => void
+}) {
+  const [name, setName] = useState(parent.name)
+  const [email, setEmail] = useState(parent.email || '')
+  const [password, setPassword] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    
+    // Validate form
+    if (!name.trim()) {
+      toast.error('Please enter a parent name')
+      return
+    }
+    
+    if (!email.trim()) {
+      toast.error('Please enter an email address')
+      return
+    }
+    
+    setLoading(true)
+    await onSubmit({ 
+      id: parent.id,
+      name: name.trim(), 
+      email: email.trim(), 
+      password: password.trim() || undefined
+    })
+    setLoading(false)
+    
+    // Reset form
+    setName(parent.name)
+    setEmail(parent.email || '')
+    setPassword('')
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <label htmlFor="editParentName" className="text-sm font-medium">
+          Parent Name *
+        </label>
+        <Input
+          id="editParentName"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Enter parent name"
+          required
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <label htmlFor="editParentEmail" className="text-sm font-medium">
+          Email *
+        </label>
+        <Input
+          id="editParentEmail"
+          type="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="Enter parent email"
+          required
+        />
+        <p className="text-xs text-gray-500">
+          Parents need email to log in and check their child's progress
+        </p>
+      </div>
+      
+      <div className="space-y-2">
+        <label htmlFor="editParentPassword" className="text-sm font-medium">
+          New Password (optional)
+        </label>
+        <Input
+          id="editParentPassword"
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          placeholder="Leave blank to keep current password"
+        />
+        <p className="text-xs text-gray-500">
+          Only fill this if you want to change the password
+        </p>
+      </div>
+      
+      <Button type="submit" className="w-full" disabled={loading}>
+        {loading ? 'Updating...' : 'Update Parent'}
+      </Button>
+    </form>
+  )
+}
 
   return (
     <Layout>
       <div className="p-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            Parent Management
-          </h1>
-          <p className="text-gray-600 mt-2">
-            View and manage parents of your students
-          </p>
+          <div className="flex justify-between items-start">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                Parent Management
+              </h1>
+              <p className="text-gray-600 mt-2">
+                View and manage parents of your students
+              </p>
+            </div>
+            <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Parent
+                </Button>
+              </DialogTrigger>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Parent</DialogTitle>
+                  <DialogDescription>
+                    Create a new parent account with login credentials
+                  </DialogDescription>
+                </DialogHeader>
+                <AddParentForm onSubmit={handleAddParent} />
+              </DialogContent>
+            </Dialog>
+            
+            {/* Edit Parent Dialog */}
+            <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Edit Parent</DialogTitle>
+                  <DialogDescription>
+                    Update parent information and credentials
+                  </DialogDescription>
+                </DialogHeader>
+                {editingParent && (
+                  <EditParentForm 
+                    parent={editingParent}
+                    onSubmit={handleEditParent} 
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </div>
         </div>
 
         {/* Search */}
@@ -249,18 +663,53 @@ export default function TeacherParentsPage() {
                   <Card key={parent.id} className="p-4">
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
-                        <div className="flex items-center space-x-3 mb-3">
-                          <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                            <Users className="w-5 h-5 text-blue-600" />
-                          </div>
-                          <div>
-                            <h3 className="font-medium text-gray-900">{parent.name}</h3>
-                            <div className="flex items-center space-x-2 text-sm text-gray-600">
-                              <Mail className="w-4 h-4" />
-                              <span>{parent.email}</span>
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center space-x-3">
+                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                              <Users className="w-5 h-5 text-blue-600" />
+                            </div>
+                            <div>
+                              <h3 className="font-medium text-gray-900">{parent.name}</h3>
+                              <div className="flex items-center space-x-2 text-sm text-gray-600">
+                                <Mail className="w-4 h-4" />
+                                <span>{parent.email}</span>
+                              </div>
                             </div>
                           </div>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button variant="ghost" className="h-8 w-8 p-0">
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => {
+                                setEditingParent(parent)
+                                setIsEditDialogOpen(true)
+                              }}>
+                                <Edit className="mr-2 h-4 w-4" />
+                                Edit Parent
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                className={parent.students && parent.students.length > 0 ? "text-gray-400 cursor-not-allowed" : "text-red-600"}
+                                onClick={() => {
+                                  if (parent.students && parent.students.length > 0) {
+                                    toast.error('Cannot delete parent: This parent has students linked to them. Please unlink all students first.')
+                                  } else {
+                                    handleDeleteParent(parent.id)
+                                  }
+                                }}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" />
+                                Delete Parent
+                                {parent.students && parent.students.length > 0 && (
+                                  <span className="ml-2 text-xs">(Has students)</span>
+                                )}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
+
 
                         {/* Children */}
                         {parent.students && parent.students.length > 0 && (
