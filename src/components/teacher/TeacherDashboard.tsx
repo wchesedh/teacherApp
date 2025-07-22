@@ -120,35 +120,51 @@ export default function TeacherDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('teacher_id', user?.id)
 
+      // First, get the teacher's classes
+      const { data: classesData, error: classesDataError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', user?.id)
+
+      if (classesDataError) {
+        console.error('Error fetching classes for stats:', classesDataError)
+      }
+
+      const classIds = classesData?.map(c => c.id) || []
+
       // Fetch students count for this teacher's classes
       const { count: studentsCount, error: studentsError } = await supabase
         .from('students')
         .select('*', { count: 'exact', head: true })
-        .in('class_id', 
-          (await supabase
-            .from('classes')
-            .select('id')
-            .eq('teacher_id', user?.id)
-          ).data?.map(c => c.id) || []
-        )
+        .in('class_id', classIds)
 
       // Fetch parents count for students in this teacher's classes
-      const { data: studentParentsData, error: studentParentsError } = await supabase
-        .from('student_parent')
-        .select('parent_id')
-        .in('student_id',
-          (await supabase
-            .from('students')
-            .select('id')
-            .in('class_id',
-              (await supabase
-                .from('classes')
-                .select('id')
-                .eq('teacher_id', user?.id)
-              ).data?.map(c => c.id) || []
-            )
-          ).data?.map(s => s.id) || []
-        )
+      let studentParentsData = null
+      let studentParentsError = null
+
+      if (classIds.length > 0) {
+        // First get student IDs for the teacher's classes
+        const { data: studentsData, error: studentsDataError } = await supabase
+          .from('students')
+          .select('id')
+          .in('class_id', classIds)
+
+        if (studentsDataError) {
+          console.error('Error fetching students for parent count:', studentsDataError)
+        } else {
+          const studentIds = studentsData?.map(s => s.id) || []
+          
+          if (studentIds.length > 0) {
+            const { data: spData, error: spError } = await supabase
+              .from('student_parent')
+              .select('parent_id')
+              .in('student_id', studentIds)
+
+            studentParentsData = spData
+            studentParentsError = spError
+          }
+        }
+      }
 
       // Get unique parent count
       const uniqueParentIds = new Set(studentParentsData?.map(sp => sp.parent_id) || [])

@@ -34,6 +34,12 @@ interface Post {
     id: string
     name: string
   }[]
+  reactions?: {
+    thumbs_up: number
+    heart: number
+    clap: number
+    smile: number
+  }
 }
 
 interface Student {
@@ -60,11 +66,16 @@ export default function TeacherPostsPage() {
   const [editPostContent, setEditPostContent] = useState('')
   const [editPostType, setEditPostType] = useState<'student_post' | 'announcement'>('student_post')
   const [editSelectedStudents, setEditSelectedStudents] = useState<string[]>([])
+  const [studentsLoading, setStudentsLoading] = useState(false)
+  const [reactors, setReactors] = useState<{ id: string; name: string; email: string }[]>([])
+  const [reactorsLoading, setReactorsLoading] = useState(false)
+  const [showReactorsDialog, setShowReactorsDialog] = useState(false)
+  const [selectedReaction, setSelectedReaction] = useState<string>('')
+  const [selectedPost, setSelectedPost] = useState<Post | null>(null)
 
   useEffect(() => {
     if (user) {
       fetchPosts()
-      fetchStudents()
     }
   }, [user])
 
@@ -113,7 +124,23 @@ export default function TeacherPostsPage() {
             }
 
             const students = tagData?.map((tag: any) => tag.students) || []
-            return { ...post, students }
+            
+            // Fetch reactions for this post
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+            
+            const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+            
+            return { ...post, students, reactions }
           })
         )
 
@@ -134,7 +161,27 @@ export default function TeacherPostsPage() {
     if (!user) return
 
     try {
-      // Get all students in this teacher's classes
+      setStudentsLoading(true)
+      // First, get the teacher's classes
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', user.id)
+
+      if (classesError) {
+        console.error('Error fetching classes:', classesError)
+        toast.error('Error loading classes')
+        return
+      }
+
+      const classIds = classesData?.map(c => c.id) || []
+
+      if (classIds.length === 0) {
+        setStudents([])
+        return
+      }
+
+      // Then get all students in this teacher's classes
       const { data: studentsData, error: studentsError } = await supabase
         .from('students')
         .select(`
@@ -146,13 +193,7 @@ export default function TeacherPostsPage() {
             name
           )
         `)
-        .in('class_id',
-          (await supabase
-            .from('classes')
-            .select('id')
-            .eq('teacher_id', user.id)
-          ).data?.map(c => c.id) || []
-        )
+        .in('class_id', classIds)
 
       if (studentsError) {
         console.error('Error fetching students:', studentsError)
@@ -164,6 +205,8 @@ export default function TeacherPostsPage() {
     } catch (error) {
       console.error('Error fetching students:', error)
       toast.error('Error loading students')
+    } finally {
+      setStudentsLoading(false)
     }
   }
 
@@ -330,12 +373,63 @@ export default function TeacherPostsPage() {
     }
   }
 
-  const openEditDialog = (post: Post) => {
+  const openEditDialog = async (post: Post) => {
     setEditingPost(post)
     setEditPostContent(post.content)
     setEditPostType(post.post_type)
     setEditSelectedStudents(post.students?.map(s => s.id) || [])
     setIsEditDialogOpen(true)
+    await fetchStudents()
+  }
+
+  // Fetch reactors for a post and reaction type
+  const fetchReactors = async (postId: string, reactionType: string) => {
+    setReactorsLoading(true)
+    setReactors([])
+    setSelectedReaction(reactionType)
+    setShowReactorsDialog(true)
+    setSelectedPost(posts.find(p => p.id === postId) || null)
+    try {
+      const { data, error } = await supabase
+        .from('post_reactions')
+        .select('parent_id, parents(name, email)')
+        .eq('post_id', postId)
+        .eq('reaction_type', reactionType)
+      if (error) {
+        toast.error('Error fetching reactors')
+        setReactors([])
+      } else {
+        setReactors((data || []).map((r: any) => {
+          const parent = Array.isArray(r.parents) ? r.parents[0] : r.parents
+          return {
+            id: r.parent_id,
+            name: parent?.name || 'Unknown',
+            email: parent?.email || ''
+          }
+        }))
+      }
+    } catch (e) {
+      toast.error('Error fetching reactors')
+      setReactors([])
+    } finally {
+      setReactorsLoading(false)
+    }
+  }
+
+  // Helper for reaction icons
+  const getReactionIcon = (type: string) => {
+    switch (type) {
+      case 'thumbs_up':
+        return <span title="Thumbs Up" role="img">👍</span>
+      case 'heart':
+        return <span title="Heart" role="img">❤️</span>
+      case 'clap':
+        return <span title="Clap" role="img">👏</span>
+      case 'smile':
+        return <span title="Smile" role="img">😊</span>
+      default:
+        return <span>👍</span>
+    }
   }
 
   if (loading) {
@@ -364,78 +458,9 @@ export default function TeacherPostsPage() {
                 My Posts
               </h1>
               <p className="text-gray-600 mt-2">
-                Create and manage posts for your students
+                View and manage posts for your students
               </p>
             </div>
-            <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Post
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Create New Post</DialogTitle>
-                  <DialogDescription>
-                    Share updates with parents about their children
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label>Post Type</Label>
-                    <Select value={newPostType} onValueChange={(value: 'student_post' | 'announcement') => setNewPostType(value)}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select post type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="student_post">Student Post</SelectItem>
-                        <SelectItem value="announcement">Announcement</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="postContent">Post Content</Label>
-                    <Textarea
-                      id="postContent"
-                      value={newPostContent}
-                      onChange={(e) => setNewPostContent(e.target.value)}
-                      placeholder="Write your post content here..."
-                      rows={4}
-                    />
-                  </div>
-                  {newPostType === 'student_post' && (
-                    <div className="space-y-2">
-                      <Label>Select Students</Label>
-                      <div className="space-y-2 max-h-40 overflow-y-auto">
-                        {students.map((student) => (
-                          <label key={student.id} className="flex items-center space-x-2">
-                            <input
-                              type="checkbox"
-                              checked={selectedStudents.includes(student.id)}
-                              onChange={(e) => {
-                                if (e.target.checked) {
-                                  setSelectedStudents([...selectedStudents, student.id])
-                                } else {
-                                  setSelectedStudents(selectedStudents.filter(id => id !== student.id))
-                                }
-                              }}
-                              className="rounded"
-                            />
-                            <span className="text-sm">
-                              {student.name} ({student.class?.name})
-                            </span>
-                          </label>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <Button onClick={handleCreatePost} className="w-full">
-                    Create Post
-                  </Button>
-                </div>
-              </DialogContent>
-            </Dialog>
           </div>
         </div>
 
@@ -511,6 +536,54 @@ export default function TeacherPostsPage() {
                   <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
                     {post.content}
                   </p>
+                  {post.reactions && (
+                    <div className="flex items-center space-x-4 text-sm text-gray-500 mt-3">
+                      {post.reactions.thumbs_up > 0 && (
+                        <button
+                          type="button"
+                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                          onClick={() => fetchReactors(post.id, 'thumbs_up')}
+                          title="See who reacted"
+                        >
+                          {getReactionIcon('thumbs_up')}
+                          <span>{post.reactions.thumbs_up}</span>
+                        </button>
+                      )}
+                      {post.reactions.heart > 0 && (
+                        <button
+                          type="button"
+                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                          onClick={() => fetchReactors(post.id, 'heart')}
+                          title="See who reacted"
+                        >
+                          {getReactionIcon('heart')}
+                          <span>{post.reactions.heart}</span>
+                        </button>
+                      )}
+                      {post.reactions.clap > 0 && (
+                        <button
+                          type="button"
+                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                          onClick={() => fetchReactors(post.id, 'clap')}
+                          title="See who reacted"
+                        >
+                          {getReactionIcon('clap')}
+                          <span>{post.reactions.clap}</span>
+                        </button>
+                      )}
+                      {post.reactions.smile > 0 && (
+                        <button
+                          type="button"
+                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                          onClick={() => fetchReactors(post.id, 'smile')}
+                          title="See who reacted"
+                        >
+                          {getReactionIcon('smile')}
+                          <span>{post.reactions.smile}</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             ))}
@@ -554,25 +627,34 @@ export default function TeacherPostsPage() {
                   <div className="space-y-2">
                     <Label>Select Students</Label>
                     <div className="space-y-2 max-h-40 overflow-y-auto">
-                      {students.map((student) => (
-                        <label key={student.id} className="flex items-center space-x-2">
-                          <input
-                            type="checkbox"
-                            checked={editSelectedStudents.includes(student.id)}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setEditSelectedStudents([...editSelectedStudents, student.id])
-                              } else {
-                                setEditSelectedStudents(editSelectedStudents.filter(id => id !== student.id))
-                              }
-                            }}
-                            className="rounded"
-                          />
-                          <span className="text-sm">
-                            {student.name} ({student.class?.name})
-                          </span>
-                        </label>
-                      ))}
+                      {studentsLoading ? (
+                        <div className="text-center py-4">
+                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mx-auto"></div>
+                          <p className="text-sm text-gray-600 mt-2">Loading students...</p>
+                        </div>
+                      ) : students.length === 0 ? (
+                        <p className="text-sm text-gray-500">No students found in your classes.</p>
+                      ) : (
+                        students.map((student) => (
+                          <label key={student.id} className="flex items-center space-x-2">
+                            <input
+                              type="checkbox"
+                              checked={editSelectedStudents.includes(student.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setEditSelectedStudents([...editSelectedStudents, student.id])
+                                } else {
+                                  setEditSelectedStudents(editSelectedStudents.filter(id => id !== student.id))
+                                }
+                              }}
+                              className="rounded"
+                            />
+                            <span className="text-sm">
+                              {student.name} ({student.class?.name})
+                            </span>
+                          </label>
+                        ))
+                      )}
                     </div>
                   </div>
                 )}
@@ -580,6 +662,37 @@ export default function TeacherPostsPage() {
                   Update Post
                 </Button>
               </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* Reactors Dialog */}
+        <Dialog open={showReactorsDialog} onOpenChange={setShowReactorsDialog}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {selectedReaction && selectedPost ? (
+                  <span>
+                    Reactors for <span className="font-semibold">{selectedReaction.replace('_', ' ')}</span> on post:<br />
+                    <span className="text-xs text-gray-500">{selectedPost.content.slice(0, 60)}{selectedPost.content.length > 60 ? '...' : ''}</span>
+                  </span>
+                ) : 'Reactors'}
+              </DialogTitle>
+            </DialogHeader>
+            {reactorsLoading ? (
+              <div className="py-4 text-center">Loading...</div>
+            ) : reactors.length === 0 ? (
+              <div className="py-4 text-center text-gray-500">No parents have reacted with this emoji yet.</div>
+            ) : (
+              <ul className="space-y-2 py-2">
+                {reactors.map((parent) => (
+                  <li key={parent.id} className="flex items-center space-x-3">
+                    <User className="w-4 h-4 text-blue-600" />
+                    <span className="font-medium">{parent.name}</span>
+                    {parent.email && <span className="text-gray-500 text-xs">({parent.email})</span>}
+                  </li>
+                ))}
+              </ul>
             )}
           </DialogContent>
         </Dialog>
