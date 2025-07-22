@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
@@ -826,9 +827,15 @@ export default function TeacherDashboard() {
                                    <div>
                                      <h4 className="font-medium">{student.name}</h4>
                                      <div className="text-sm text-gray-500 mt-1">
-                                       {student.id_number && <span className="mr-2">ID: {student.id_number}</span>}
+                                       {student.id_number && (
+                                         <Badge variant="default" className="mr-2 mb-1">
+                                           ID: {student.id_number}
+                                         </Badge>
+                                       )}
                                        {student.parents && student.parents.length > 0 ? (
-                                         <span>Parents: {student.parents.map(p => p.name).join(', ')}</span>
+                                         <span>
+                                           {student.parents.length === 1 ? 'Parent' : 'Parents'}: {student.parents.map(p => p.name).join(', ')}
+                                         </span>
                                        ) : (
                                          <span className="text-gray-400">No parents assigned</span>
                                        )}
