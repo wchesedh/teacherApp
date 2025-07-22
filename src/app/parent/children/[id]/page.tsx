@@ -36,11 +36,11 @@ import { formatFullName, getDisplayName } from '@/lib/utils'
 
 interface Student {
   id: string
-  first_name: string
+  first_name?: string
   middle_name?: string
-  last_name: string
+  last_name?: string
   suffix?: string
-  name?: string
+  name: string
   id_number?: string
   class_id: string
   created_at: string
@@ -147,11 +147,16 @@ export default function ParentStudentProfilePage() {
       }
 
       setStudent(studentData)
+      // Parse the student name to get first and last name
+      const nameParts = studentData.name?.split(' ') || []
+      const firstName = nameParts[0] || ''
+      const lastName = nameParts.slice(1).join(' ') || ''
+      
       setEditForm({
-        first_name: studentData.first_name || '',
-        middle_name: studentData.middle_name || '',
-        last_name: studentData.last_name || '',
-        suffix: studentData.suffix || '',
+        first_name: firstName,
+        middle_name: '',
+        last_name: lastName,
+        suffix: '',
         id_number: studentData.id_number || '',
         bio: studentData.bio || '',
         grade: studentData.grade || '',
@@ -392,17 +397,17 @@ export default function ParentStudentProfilePage() {
     if (!student) return
 
     try {
+      // Create combined name from separate fields
+      const combinedName = `${editForm.first_name} ${editForm.last_name}`.trim()
+      
       const { error } = await supabase
         .from('students')
         .update({
-          first_name: editForm.first_name,
-          middle_name: editForm.middle_name,
-          last_name: editForm.last_name,
-          suffix: editForm.suffix,
-          id_number: editForm.id_number,
-          bio: editForm.bio,
-          grade: editForm.grade,
-          age: editForm.age ? parseInt(editForm.age) : null
+          name: combinedName,
+          id_number: editForm.id_number || undefined,
+          bio: editForm.bio || undefined,
+          grade: editForm.grade || undefined,
+          age: editForm.age ? parseInt(editForm.age) : undefined
         })
         .eq('id', student.id)
 
@@ -412,10 +417,14 @@ export default function ParentStudentProfilePage() {
         return
       }
 
-      setStudent(prev => prev ? { 
-        ...prev, 
-        ...editForm, 
-        age: editForm.age ? parseInt(editForm.age) : null 
+      // Update local state
+      setStudent(prev => prev ? {
+        ...prev,
+        name: combinedName,
+        id_number: editForm.id_number || undefined,
+        bio: editForm.bio || undefined,
+        grade: editForm.grade || undefined,
+        age: editForm.age ? parseInt(editForm.age) : undefined
       } : null)
       setEditMode(false)
       toast.success('Profile updated successfully!')
@@ -583,7 +592,7 @@ export default function ParentStudentProfilePage() {
             </Link>
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}'s Profile
+                {student.name}'s Profile
               </h1>
               <p className="text-gray-600 mt-2">
                 View and manage your child's information
@@ -695,6 +704,41 @@ export default function ParentStudentProfilePage() {
                           placeholder="Enter student ID number (optional)"
                         />
                       </div>
+
+                      <div>
+                        <Label htmlFor="grade">Grade</Label>
+                        <Input
+                          id="grade"
+                          value={editForm.grade}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter grade level (optional)"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="age">Age</Label>
+                        <Input
+                          id="age"
+                          type="number"
+                          value={editForm.age}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
+                          className="mt-1"
+                          placeholder="Enter age (optional)"
+                        />
+                      </div>
+
+                      <div>
+                        <Label htmlFor="bio">Bio</Label>
+                        <textarea
+                          id="bio"
+                          value={editForm.bio}
+                          onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
+                          className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          rows={3}
+                          placeholder="Enter bio (optional)"
+                        />
+                      </div>
                     </>
                   )}
 
@@ -703,37 +747,21 @@ export default function ParentStudentProfilePage() {
                     <div>
                       <Label>Full Name</Label>
                       <p className="text-xl font-semibold mt-1 text-gray-900">
-                        {getDisplayName(student.first_name, student.last_name, student.middle_name, student.suffix, student.name)}
+                        {student.name}
                       </p>
                     </div>
                   )}
 
                   <div>
                     <Label htmlFor="grade">Grade</Label>
-                    {editMode ? (
-                      <Input
-                        id="grade"
-                        value={editForm.grade}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
-                        className="mt-1"
-                        placeholder="Enter grade level"
-                      />
-                    ) : (
+                    {!editMode && (
                       <p className="text-gray-600 mt-1">{student.grade || 'Not specified'}</p>
                     )}
                   </div>
 
                   <div>
                     <Label htmlFor="id_number">ID Number</Label>
-                    {editMode ? (
-                      <Input
-                        id="id_number"
-                        value={editForm.id_number}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, id_number: e.target.value }))}
-                        className="mt-1"
-                        placeholder="Enter student ID number"
-                      />
-                    ) : (
+                    {!editMode && (
                       <div className="mt-1">
                         {student.id_number ? (
                           <Badge variant="default">ID: {student.id_number}</Badge>
@@ -746,32 +774,14 @@ export default function ParentStudentProfilePage() {
 
                   <div>
                     <Label htmlFor="age">Age</Label>
-                    {editMode ? (
-                      <Input
-                        id="age"
-                        type="number"
-                        value={editForm.age}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
-                        className="mt-1"
-                        placeholder="Enter age"
-                      />
-                    ) : (
+                    {!editMode && (
                       <p className="text-gray-600 mt-1">{student.age ? `${student.age} years old` : 'Not specified'}</p>
                     )}
                   </div>
 
                   <div>
                     <Label htmlFor="bio">Bio</Label>
-                    {editMode ? (
-                      <textarea
-                        id="bio"
-                        value={editForm.bio}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, bio: e.target.value }))}
-                        className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                        rows={3}
-                        placeholder="Tell us about the student..."
-                      />
-                    ) : (
+                    {!editMode && (
                       <p className="text-gray-600 mt-1">{student.bio || 'No bio provided'}</p>
                     )}
                   </div>

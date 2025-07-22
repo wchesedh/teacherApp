@@ -757,16 +757,12 @@ export default function StudentProfilePage() {
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                           <Input
-                            placeholder="Grade (optional)"
-                            value={editForm.grade}
-                            onChange={(e) => setEditForm(prev => ({ ...prev, grade: e.target.value }))}
-                          />
-                          <Input
                             placeholder="Age (optional)"
                             type="number"
                             value={editForm.age}
                             onChange={(e) => setEditForm(prev => ({ ...prev, age: e.target.value }))}
                           />
+                          <div className="flex-1"></div>
                         </div>
                         <textarea
                           placeholder="Bio (optional)"
