@@ -579,7 +579,8 @@ export default function TeacherDashboard() {
 
       // First add the student - using old name field for now until schema is updated
       const studentDataToInsert: any = {
-        name: `${studentData.first_name} ${studentData.last_name}`.trim()
+        name: `${studentData.first_name} ${studentData.last_name}`.trim(),
+        class_id: studentData.class_id  // Set the class_id when creating the student
       }
       
       // Only add id_number if it's provided and not empty
@@ -613,7 +614,7 @@ export default function TeacherDashboard() {
           // Still show success since student was created
         }
 
-        // Create the student-class relationship
+        // Create the student-class relationship (as a backup/consistency measure)
         const { error: classRelationshipError } = await supabase
           .from('student_class')
           .insert([{
@@ -623,7 +624,7 @@ export default function TeacherDashboard() {
 
         if (classRelationshipError) {
           console.error('Error creating student-class relationship:', classRelationshipError)
-          // Still show success since student was created
+          // This is okay since we already set class_id on the student record
         }
       }
 
