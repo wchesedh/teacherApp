@@ -1380,7 +1380,15 @@ export default function StudentProfilePage({
                           <div>
                             <p className="text-xs text-gray-500 uppercase tracking-wide">Joined</p>
                             <p className="text-sm font-medium text-gray-900">
-                              {new Date(student.created_at).toLocaleDateString()}
+                              {new Date(student.created_at).toLocaleDateString('en-US', { 
+                                weekday: 'long', 
+                                year: 'numeric', 
+                                month: 'long', 
+                                day: 'numeric',
+                                hour: 'numeric',
+                                minute: '2-digit',
+                                hour12: true
+                              })}
                             </p>
                           </div>
                         </div>
@@ -1528,7 +1536,15 @@ export default function StudentProfilePage({
                       >
                         <div className="flex items-start justify-between mb-2">
                           <span className="text-sm text-gray-500">
-                            {new Date(post.created_at).toLocaleDateString()}
+                            {new Date(post.created_at).toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            })}
                           </span>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>

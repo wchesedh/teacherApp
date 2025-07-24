@@ -34,28 +34,31 @@ export default function StudentManagement() {
   const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [classes, setClasses] = useState<Class[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   useEffect(() => {
     if (user) {
-      fetchData()
+      // Load data immediately without showing loading state
+      fetchDataOptimized()
     }
   }, [user])
 
-  const fetchData = async () => {
+  const fetchDataOptimized = async () => {
     if (!user) {
       console.log('User not loaded yet, skipping fetchData')
-      setLoading(false)
       return
     }
     
     try {
-      setLoading(true)
       console.log('Fetching data for user:', user.id)
       
-      // Fetch teacher's classes
+      // Start with empty arrays to show page immediately
+      setStudents([])
+      setClasses([])
+      
+      // Fetch teacher's classes first (fastest query)
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('*')
@@ -75,7 +78,6 @@ export default function StudentManagement() {
       if (classIds.length === 0) {
         console.log('No classes found for teacher')
         setStudents([])
-        setLoading(false)
         return
       }
 
@@ -184,8 +186,6 @@ export default function StudentManagement() {
     } catch (error) {
       console.error('Error fetching data:', error)
       toast.error('Error fetching data')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -247,9 +247,24 @@ export default function StudentManagement() {
           console.error('Error adding student to class:', studentClassError)
           // Don't fail the whole operation, just log the error
         }
+
+        // Optimistic update
+        const newStudent: Student = {
+          id: studentResult[0].id,
+          name: studentData.name,
+          id_number: studentData.id_number || undefined,
+          class_id: studentData.class_id,
+          created_at: studentResult[0].created_at,
+          avatar_url: studentResult[0].avatar_url,
+          classes: [{
+            id: classData.id,
+            name: classes.find(c => c.id === classData.id)?.name || 'Unknown Class'
+          }]
+        }
+        
+        setStudents(prev => [newStudent, ...prev])
       }
 
-      await fetchData()
       setIsAddDialogOpen(false)
       toast.success('Student created successfully!')
     } catch (error) {
@@ -276,6 +291,9 @@ export default function StudentManagement() {
         return
       }
 
+      // Optimistic update
+      setStudents(prev => prev.filter(s => s.id !== studentId))
+
       // Remove student from all classes first
       const { error: removeFromClassesError } = await supabase
         .from('student_class')
@@ -295,13 +313,16 @@ export default function StudentManagement() {
       if (error) {
         console.error('Error deleting student:', error)
         toast.error('Error deleting student: ' + error.message)
+        // Revert optimistic update
+        await fetchDataOptimized()
       } else {
-        await fetchData()
         toast.success('Student deleted successfully!')
       }
     } catch (error) {
       console.error('Error deleting student:', error)
       toast.error('Error deleting student')
+      // Revert optimistic update
+      await fetchDataOptimized()
     }
   }
 
@@ -364,13 +385,7 @@ export default function StudentManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
-                    Loading students...
-                  </TableCell>
-                </TableRow>
-              ) : filteredStudents.length === 0 ? (
+              {filteredStudents.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="text-center py-8">
                     {students.length === 0 ? (

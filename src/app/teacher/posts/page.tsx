@@ -532,7 +532,15 @@ export default function TeacherPostsPage() {
                         </div>
                         <CardDescription className="flex items-center space-x-2 mt-1">
                           <Calendar className="w-3 h-3" />
-                          <span>{new Date(post.created_at).toLocaleDateString()}</span>
+                          <span>{new Date(post.created_at).toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })}</span>
                         </CardDescription>
                       </div>
                     </div>

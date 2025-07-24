@@ -904,7 +904,15 @@ export default function TeacherDashboard() {
                           <span className="text-sm text-purple-600 bg-purple-100 px-2">{announcement.class.name}</span>
                         )}
                         <span className="text-sm text-gray-500">
-                          {new Date(announcement.created_at).toLocaleDateString()}
+                          {new Date(announcement.created_at).toLocaleDateString('en-US', { 
+                            weekday: 'long', 
+                            year: 'numeric', 
+                            month: 'long', 
+                            day: 'numeric',
+                            hour: 'numeric',
+                            minute: '2-digit',
+                            hour12: true
+                          })}
                         </span>
                       </div>
                     </div>

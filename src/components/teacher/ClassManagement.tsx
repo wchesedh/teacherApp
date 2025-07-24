@@ -22,23 +22,27 @@ interface Class {
 export default function ClassManagement() {
   const { user } = useAuth()
   const [classes, setClasses] = useState<Class[]>([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
 
   useEffect(() => {
     if (user) {
-      fetchClasses()
+      // Load classes immediately without showing loading state
+      fetchClassesOptimized()
     }
   }, [user])
 
-  const fetchClasses = async () => {
+  const fetchClassesOptimized = async () => {
     if (!user) {
       console.error('fetchClasses called but user is not loaded')
       return
     }
+    
     try {
-      setLoading(true)
+      // Start with empty array to show page immediately
+      setClasses([])
+      
       const { data, error } = await supabase
         .from('classes')
         .select('*')
@@ -54,8 +58,6 @@ export default function ClassManagement() {
     } catch (error) {
       console.error('Error fetching classes (exception):', error, 'user:', user)
       toast.error('Error fetching classes')
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -65,12 +67,14 @@ export default function ClassManagement() {
 
   const handleAddClass = async (classData: { name: string }) => {
     try {
-      const { error } = await supabase
+      const { data: newClass, error } = await supabase
         .from('classes')
         .insert([{
           name: classData.name,
           teacher_id: user?.id
         }])
+        .select()
+        .single()
 
       if (error) {
         console.error('Error adding class:', error)
@@ -78,7 +82,11 @@ export default function ClassManagement() {
         return
       }
 
-      await fetchClasses()
+      // Optimistic update
+      if (newClass) {
+        setClasses(prev => [newClass, ...prev])
+      }
+      
       setIsAddDialogOpen(false)
       toast.success('Class created successfully!')
     } catch (error) {
@@ -93,6 +101,9 @@ export default function ClassManagement() {
     }
 
     try {
+      // Optimistic update
+      setClasses(prev => prev.filter(c => c.id !== classId))
+      
       const { error } = await supabase
         .from('classes')
         .delete()
@@ -101,13 +112,16 @@ export default function ClassManagement() {
       if (error) {
         console.error('Error deleting class:', error)
         toast.error('Error deleting class: ' + error.message)
+        // Revert optimistic update
+        await fetchClassesOptimized()
       } else {
-        await fetchClasses()
         toast.success('Class deleted successfully!')
       }
     } catch (error) {
       console.error('Error deleting class:', error)
       toast.error('Error deleting class')
+      // Revert optimistic update
+      await fetchClassesOptimized()
     }
   }
 
@@ -165,13 +179,7 @@ export default function ClassManagement() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={3} className="text-center py-8">
-                    Loading classes...
-                  </TableCell>
-                </TableRow>
-              ) : filteredClasses.length === 0 ? (
+              {filteredClasses.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={3} className="text-center py-8">
                     No classes found. Add your first class using the "Add Class" button above.
