@@ -129,6 +129,7 @@ export default function StudentProfilePage({
   const [showAvatarDialog, setShowAvatarDialog] = useState(false)
   const [uploadingAvatar, setUploadingAvatar] = useState(false)
   const [isSettingClassContext, setIsSettingClassContext] = useState(false)
+  const [postsLoading, setPostsLoading] = useState(false)
   const [stats, setStats] = useState({
     posts: 0,
     teachers: 0,
@@ -164,10 +165,17 @@ export default function StudentProfilePage({
     setSelectedClassId(classId)
     const selectedClass = studentClasses.find(c => c.id === classId)
     setClassInfo(selectedClass || null)
+    
+    // Clear posts first for smooth transition
+    setPosts([])
+    setPostsLoading(true)
+    
     await fetchPostsForClass(classId)
     if (student) {
       await fetchStudentStats(student, selectedClass || null)
     }
+    
+    setPostsLoading(false)
   }
 
   const fetchPostsForClass = async (classId: string) => {
@@ -912,10 +920,48 @@ export default function StudentProfilePage({
         return
       }
 
-      setIsCreatePostOpen(false)
-      await fetchStudentDetails() // Refresh posts
-      await fetchStudentStats() // Refresh stats
+      // Create the new post object with reactions
+      const newPost: Post = {
+        id: postId,
+        content: postData.content,
+        created_at: createdPost[0].created_at,
+        image_url: postData.image_url,
+        reactions: { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
+      }
+
+      // Add the new post to the beginning of the posts array (most recent first)
+      setPosts(prevPosts => [newPost, ...prevPosts])
+      
+      // Add enter animation to the new post
+      setTimeout(() => {
+        const postElement = document.getElementById(`post-${postId}`)
+        if (postElement) {
+          postElement.classList.add('post-enter')
+        }
+      }, 50) // Small delay to ensure DOM is updated
+
+      // Update stats optimistically
+      setStats(prevStats => ({
+        ...prevStats,
+        posts: prevStats.posts + 1
+      }))
+
+      // Show success message first
       toast.success('Post created successfully!')
+      
+      // Close the dialog with a small delay for smooth transition
+      setTimeout(() => {
+        setIsCreatePostOpen(false)
+      }, 100)
+
+      // Highlight the new post temporarily
+      setTimeout(() => {
+        const postElement = document.getElementById(`post-${postId}`)
+        if (postElement) {
+          postElement.classList.add('post-highlight')
+        }
+      }, 100) // Small delay to ensure DOM is updated
+
     } catch (error) {
       console.error('Error creating post:', error)
       toast.error('Error creating post')
@@ -988,8 +1034,11 @@ export default function StudentProfilePage({
       // Optimistic update - remove from UI with animation
       setPosts(prev => prev.filter(post => post.id !== postId));
       
-      // Refresh stats to reflect the deleted post
-      await fetchStudentStats();
+      // Update stats optimistically
+      setStats(prevStats => ({
+        ...prevStats,
+        posts: Math.max(0, prevStats.posts - 1)
+      }));
       
       toast.success('Post deleted successfully!');
     } catch (error) {
@@ -1023,12 +1072,19 @@ export default function StudentProfilePage({
         return;
       }
 
+      // Update the post in the local state
+      setPosts(prevPosts => 
+        prevPosts.map(post => 
+          post.id === editingPost.id 
+            ? { ...post, content: editContent.trim() }
+            : post
+        )
+      );
+
       toast.success('Post updated successfully!');
       setShowEditDialog(false);
       setEditingPost(null);
       setEditContent('');
-      await fetchStudentDetails(); // Refresh the posts
-      await fetchStudentStats(); // Refresh stats
     } catch (error) {
       console.error('Error updating post:', error);
       toast.error('Error updating post');
@@ -1441,7 +1497,12 @@ export default function StudentProfilePage({
                 </div>
               </CardHeader>
               <CardContent>
-                {posts.length === 0 ? (
+                {postsLoading ? (
+                  <div className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                    <p className="text-gray-600">Loading posts...</p>
+                  </div>
+                ) : posts.length === 0 ? (
                   <div className="text-center py-8">
                     <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <h3 className="text-lg font-medium text-gray-900 mb-2">No Posts Yet</h3>
@@ -1458,6 +1519,7 @@ export default function StudentProfilePage({
                     {posts.map((post) => (
                       <div 
                         key={post.id} 
+                        id={`post-${post.id}`}
                         className={`border rounded-lg p-4 transition-all duration-300 ease-in-out ${
                           deletingIds.has(post.id) 
                             ? 'opacity-50 scale-95 bg-gray-50' 
