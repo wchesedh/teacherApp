@@ -191,8 +191,8 @@ export default function TeacherDashboard() {
 
       const parentsCount = allParentIds.size
 
-      // Fetch posts count for this teacher
-      const { count: postsCount, error: postsError } = await supabase
+      // Fetch all posts count for this teacher
+      const { count: allPostsCount, error: postsError } = await supabase
         .from('posts')
         .select('*', { count: 'exact', head: true })
         .eq('teacher_id', user?.id)
@@ -230,11 +230,14 @@ export default function TeacherDashboard() {
         }
       }
 
+      // Calculate individual posts count (total posts minus announcements)
+      const individualPostsCount = (allPostsCount || 0) - announcementsCount
+
       setStats({
         classes: classesCount || 0,
         parents: parentsCount,
         students: studentsCount || 0,
-        posts: postsCount || 0,
+        posts: individualPostsCount,
         announcements: announcementsCount
       })
 
