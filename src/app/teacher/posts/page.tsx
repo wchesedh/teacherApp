@@ -90,64 +90,90 @@ export default function TeacherPostsPage() {
       setLoading(true)
       console.log('Fetching posts for teacher:', user.id)
 
-      // Fetch posts created by this teacher
-      const { data: postsData, error: postsError } = await supabase
+      // First, get all posts created by this teacher
+      const { data: allPostsData, error: allPostsError } = await supabase
         .from('posts')
         .select('*')
         .eq('teacher_id', user.id)
         .order('created_at', { ascending: false })
 
-      if (postsError) {
-        console.error('Error fetching posts:', postsError)
+      if (allPostsError) {
+        console.error('Error fetching all posts:', allPostsError)
         toast.error('Error fetching posts')
         return
       }
 
-      if (postsData && postsData.length > 0) {
-        // Fetch student tags for each post
-        const postsWithStudents = await Promise.all(
-          postsData.map(async (post) => {
-            const { data: tagData, error: tagError } = await supabase
-              .from('post_student_tags')
-              .select(`
-                student_id,
-                students (
-                  id,
-                  name
-                )
-              `)
-              .eq('post_id', post.id)
-
-            if (tagError) {
-              console.error('Error fetching student tags for post:', post.id, tagError)
-              return { ...post, students: [] }
-            }
-
-            const students = tagData?.map((tag: any) => tag.students) || []
-            
-            // Fetch reactions for this post
-            const { data: reactionCounts, error: reactionCountsError } = await supabase
-              .from('post_reactions')
-              .select('reaction_type')
-              .eq('post_id', post.id)
-            
-            const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
-            if (!reactionCountsError && reactionCounts) {
-              reactionCounts.forEach((reaction: any) => {
-                if (reactions.hasOwnProperty(reaction.reaction_type)) {
-                  reactions[reaction.reaction_type as keyof typeof reactions]++
-                }
-              })
-            }
-            
-            return { ...post, students, reactions }
-          })
-        )
-
-        setPosts(postsWithStudents)
-      } else {
+      if (!allPostsData || allPostsData.length === 0) {
         setPosts([])
+        setLoading(false)
+        return
       }
+
+      // Get all post IDs that are tagged with students
+      const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+        .from('post_student_tags')
+        .select('post_id')
+        .in('post_id', allPostsData.map(post => post.id))
+
+      if (studentTagsError) {
+        console.error('Error fetching student tagged posts:', studentTagsError)
+        toast.error('Error fetching posts')
+        return
+      }
+
+      // Get unique post IDs that are tagged with students
+      const studentTaggedPostIds = [...new Set((studentTaggedPosts || []).map(tag => tag.post_id))]
+
+      // Filter posts to only include those tagged with students
+      const studentPosts = allPostsData.filter(post => studentTaggedPostIds.includes(post.id))
+
+      if (studentPosts.length === 0) {
+        setPosts([])
+        setLoading(false)
+        return
+      }
+
+      // Fetch student tags for each post
+      const postsWithStudents = await Promise.all(
+        studentPosts.map(async (post) => {
+          const { data: tagData, error: tagError } = await supabase
+            .from('post_student_tags')
+            .select(`
+              student_id,
+              students (
+                id,
+                name
+              )
+            `)
+            .eq('post_id', post.id)
+
+          if (tagError) {
+            console.error('Error fetching student tags for post:', post.id, tagError)
+            return { ...post, students: [] }
+          }
+
+          const students = tagData?.map((tag: any) => tag.students) || []
+          
+          // Fetch reactions for this post
+          const { data: reactionCounts, error: reactionCountsError } = await supabase
+            .from('post_reactions')
+            .select('reaction_type')
+            .eq('post_id', post.id)
+          
+          const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile: 0 }
+          if (!reactionCountsError && reactionCounts) {
+            reactionCounts.forEach((reaction: any) => {
+              if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                reactions[reaction.reaction_type as keyof typeof reactions]++
+              }
+            })
+          }
+          
+          return { ...post, students, reactions }
+        })
+      )
+
+      setPosts(postsWithStudents)
 
     } catch (error) {
       console.error('Error fetching posts:', error)
@@ -455,10 +481,10 @@ export default function TeacherPostsPage() {
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-3xl font-bold text-gray-900">
-                My Posts
+                Student Posts
               </h1>
               <p className="text-gray-600 mt-2">
-                View and manage posts for your students
+                View and manage posts tagged with specific students
               </p>
             </div>
           </div>
@@ -469,9 +495,9 @@ export default function TeacherPostsPage() {
             <CardContent className="p-8">
               <div className="text-center">
                 <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Posts Yet</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No Student Posts Yet</h3>
                 <p className="text-gray-600">
-                  Create your first post to share updates with parents about their children.
+                  Create posts tagged with specific students to share updates with their parents.
                 </p>
               </div>
             </CardContent>

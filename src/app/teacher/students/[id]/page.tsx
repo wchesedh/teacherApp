@@ -53,6 +53,7 @@ interface Student {
   grade?: string
   age?: number | null
   parents?: Parent[]
+  classes?: Class[]
 }
 
 interface Parent {
@@ -109,6 +110,8 @@ export default function StudentProfilePage({
   
   const [student, setStudent] = useState<Student | null>(null)
   const [classInfo, setClassInfo] = useState<Class | null>(null)
+  const [studentClasses, setStudentClasses] = useState<Class[]>([])
+  const [selectedClassId, setSelectedClassId] = useState<string | null>(null)
   const [posts, setPosts] = useState<Post[]>([])
   const [loading, setLoading] = useState(true)
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false)
@@ -154,6 +157,89 @@ export default function StudentProfilePage({
       fetchStudentStats()
     }
   }, [student, classInfo])
+
+  const handleClassSelection = async (classId: string) => {
+    if (!user) return
+    
+    setSelectedClassId(classId)
+    const selectedClass = studentClasses.find(c => c.id === classId)
+    setClassInfo(selectedClass || null)
+    await fetchPostsForClass(classId)
+    if (student) {
+      await fetchStudentStats(student, selectedClass || null)
+    }
+  }
+
+  const fetchPostsForClass = async (classId: string) => {
+    if (!user || !classId) return
+
+    try {
+      // Fetch posts for this specific class
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('teacher_id', user?.id)
+        .eq('class_id', classId)
+        .order('created_at', { ascending: false })
+
+      if (postsError) {
+        console.error('Error fetching posts for class:', postsError)
+        setPosts([])
+        return
+      }
+
+      if (postsData && postsData.length > 0) {
+        // Filter posts to only include those tagged with this student
+        const { data: tagData, error: tagError } = await supabase
+          .from('post_student_tags')
+          .select('post_id')
+          .eq('student_id', studentId)
+          .in('post_id', postsData.map(post => post.id))
+
+        if (tagError) {
+          console.error('Error fetching post tags:', tagError)
+          setPosts([])
+          return
+        }
+
+        // Get the post IDs that are tagged with this student
+        const taggedPostIds = tagData?.map(tag => tag.post_id) || []
+        
+        // Filter posts to only include those tagged with this student
+        const studentPosts = postsData.filter(post => taggedPostIds.includes(post.id))
+
+        // Fetch reactions for each post
+        const postsWithReactions = await Promise.all(
+          (studentPosts || []).map(async (post) => {
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+            
+            const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile:0 }
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+            
+            return {
+              ...post,
+              reactions
+            }
+          })
+        )
+        setPosts(postsWithReactions)
+      } else {
+        setPosts([])
+      }
+    } catch (error) {
+      console.error('Error fetching posts for class:', error)
+      setPosts([])
+    }
+  }
 
   const fetchStudentStats = async (studentData?: Student, classData?: Class | null) => {
     const currentStudent = studentData || student
@@ -378,14 +464,73 @@ export default function StudentProfilePage({
 
       console.log('Student data:', studentData)
 
-      // Get the class context from the URL - class context is required
-      if (!classIdFromUrl) {
-        console.error('No class ID provided in URL')
-        toast.error('Class context is required to view student details. Please select a class from the dashboard.')
+      // Fetch all classes for this student
+      let allClasses: Class[] = []
+      
+      try {
+        // First try to get all classes using student_class table
+        const { data: studentClassesData, error: studentClassesError } = await supabase
+          .from('student_class')
+          .select(`
+            classes!student_class_class_id_fkey (
+              id,
+              name,
+              teacher_id
+            )
+          `)
+          .eq('student_id', studentId)
+
+        if (studentClassesError) {
+          console.error('Error fetching student classes:', studentClassesError)
+          // Fallback to single class if student_class table fails
+          if (studentData.class_id) {
+            const { data: singleClassData, error: singleClassError } = await supabase
+              .from('classes')
+              .select('id, name, teacher_id')
+              .eq('id', studentData.class_id)
+              .single()
+
+            if (!singleClassError && singleClassData) {
+              allClasses = [singleClassData]
+            }
+          }
+        } else {
+          allClasses = studentClassesData?.map((sc: any) => sc.classes).filter(Boolean) || []
+        }
+      } catch (error) {
+        console.error('Error fetching student classes:', error)
+        // Fallback to single class
+        if (studentData.class_id) {
+          const { data: singleClassData, error: singleClassError } = await supabase
+            .from('classes')
+            .select('id, name, teacher_id')
+            .eq('id', studentData.class_id)
+            .single()
+
+          if (!singleClassError && singleClassData) {
+            allClasses = [singleClassData]
+          }
+        }
+      }
+
+      setStudentClasses(allClasses)
+
+      // Determine which class to use
+      let effectiveClassId: string
+      
+      if (classIdFromUrl) {
+        // Use the class ID from URL if provided
+        effectiveClassId = classIdFromUrl
+      } else if (allClasses.length > 0) {
+        // Use the first class if no URL parameter
+        effectiveClassId = allClasses[0].id
+      } else {
+        console.error('No classes found for student')
+        toast.error('Student is not enrolled in any classes')
         return
       }
 
-      let effectiveClassId = classIdFromUrl
+      setSelectedClassId(effectiveClassId)
 
       console.log('Using class ID:', effectiveClassId)
       
@@ -589,63 +734,8 @@ export default function StudentProfilePage({
         age: studentData.age?.toString() || ''
       })
 
-      // Fetch posts for this student in this specific class
-      const { data: postsData, error: postsError } = await supabase
-        .from('posts')
-        .select('*')
-        .eq('teacher_id', user?.id)
-        .eq('class_id', effectiveClassId)
-        .order('created_at', { ascending: false })
-
-      if (postsError) {
-        console.error('Error fetching posts:', postsError)
-        setPosts([])
-      } else if (postsData && postsData.length > 0) {
-        // Filter posts to only include those tagged with this student
-        const { data: tagData, error: tagError } = await supabase
-          .from('post_student_tags')
-          .select('post_id')
-          .eq('student_id', studentId)
-          .in('post_id', postsData.map(post => post.id))
-
-        if (tagError) {
-          console.error('Error fetching post tags:', tagError)
-          setPosts([])
-        } else {
-          // Get the post IDs that are tagged with this student
-          const taggedPostIds = tagData?.map(tag => tag.post_id) || []
-          
-          // Filter posts to only include those tagged with this student
-          const studentPosts = postsData.filter(post => taggedPostIds.includes(post.id))
-
-          // Fetch reactions for each post
-          const postsWithReactions = await Promise.all(
-            (studentPosts || []).map(async (post) => {
-              const { data: reactionCounts, error: reactionCountsError } = await supabase
-                .from('post_reactions')
-                .select('reaction_type')
-                .eq('post_id', post.id)
-              
-              const reactions = { thumbs_up: 0, heart: 0, clap: 0, smile:0 }
-              if (!reactionCountsError && reactionCounts) {
-                reactionCounts.forEach((reaction: any) => {
-                  if (reactions.hasOwnProperty(reaction.reaction_type)) {
-                    reactions[reaction.reaction_type as keyof typeof reactions]++
-                  }
-                })
-              }
-              
-              return {
-                ...post,
-                reactions
-              }
-            })
-          )
-          setPosts(postsWithReactions)
-        }
-      } else {
-        setPosts([])
-      }
+      // Fetch posts for the selected class
+      await fetchPostsForClass(effectiveClassId)
 
       // Fetch stats after all data is loaded
       await fetchStudentStats(studentData, classData)
@@ -1056,6 +1146,8 @@ export default function StudentProfilePage({
           </Card>
         </div>
 
+
+
         <div className="grid gap-6 lg:grid-cols-3">
           {/* Student Info */}
           <div className="lg:col-span-1">
@@ -1216,8 +1308,15 @@ export default function StudentProfilePage({
                         <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
                           <BookOpen className="w-4 h-4 text-blue-600" />
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Class</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">
+                              {studentClasses.length > 1 ? 'Current Class' : 'Class'}
+                            </p>
                             <p className="text-sm font-medium text-gray-900">{classInfo?.name}</p>
+                            {studentClasses.length > 1 && (
+                              <p className="text-xs text-gray-500 mt-1">
+                                {studentClasses.findIndex(c => c.id === selectedClassId) + 1} of {studentClasses.length} classes
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-lg">
@@ -1309,10 +1408,31 @@ export default function StudentProfilePage({
                     <CardTitle className="flex items-center space-x-2">
                       <MessageSquare className="w-5 h-5" />
                       <span>Progress Updates</span>
+                      {studentClasses.length > 1 && (
+                        <Badge variant="outline" className="text-xs">
+                          {studentClasses.findIndex(c => c.id === selectedClassId) + 1} of {studentClasses.length}
+                        </Badge>
+                      )}
                     </CardTitle>
                     <CardDescription>
                       Posts about {student.name}'s progress
+                      {studentClasses.length > 1 && ` in ${classInfo?.name}`}
                     </CardDescription>
+                    {studentClasses.length > 1 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {studentClasses.map((classItem) => (
+                          <Button
+                            key={classItem.id}
+                            variant={selectedClassId === classItem.id ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleClassSelection(classItem.id)}
+                            className="flex items-center space-x-2"
+                          >
+                            <span>{classItem.name}</span>
+                          </Button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <Button onClick={() => setIsCreatePostOpen(true)}>
                     <MessageSquare className="w-4 h-4 mr-2" />
@@ -1455,6 +1575,11 @@ export default function StudentProfilePage({
                 {classInfo && (
                   <span className="text-sm font-normal text-gray-600 block">
                     for {classInfo.name} Class
+                    {studentClasses.length > 1 && (
+                      <span className="text-xs text-gray-500 ml-2">
+                        ({studentClasses.findIndex(c => c.id === selectedClassId) + 1} of {studentClasses.length})
+                      </span>
+                    )}
                   </span>
                 )}
               </DialogTitle>

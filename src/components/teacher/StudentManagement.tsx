@@ -404,7 +404,17 @@ export default function StudentManagement() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem onClick={() => {
-                            router.push(`/teacher/students/${student.id}`)
+                            // Get the first class ID for this student
+                            const classId = student.classes && student.classes.length > 0 
+                              ? student.classes[0].id 
+                              : student.class_id
+                            
+                            if (!classId) {
+                              toast.error('Student is not assigned to any class')
+                              return
+                            }
+                            
+                            router.push(`/teacher/students/${student.id}?classId=${classId}`)
                           }}>
                             <Eye className="mr-2 h-4 w-4" />
                             View Details
