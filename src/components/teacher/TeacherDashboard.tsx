@@ -167,9 +167,27 @@ export default function TeacherDashboard() {
         }
       }
 
-      // Get unique parent count
+      // Get unique parent IDs from students
       const uniqueParentIds = new Set(studentParentsData?.map(sp => sp.parent_id) || [])
-      const parentsCount = uniqueParentIds.size
+
+      // Also fetch all parents (including those without students yet)
+      // This allows teachers to see parents they've created even if they haven't been linked to students
+      const { data: allParentsData, error: allParentsError } = await supabase
+        .from('parents')
+        .select('*')
+        .order('created_at', { ascending: false })
+
+      if (allParentsError) {
+        console.error('Error fetching all parents:', allParentsError)
+      }
+
+      // Combine parents from students and all parents, removing duplicates
+      const allParentIds = new Set([
+        ...uniqueParentIds,
+        ...(allParentsData?.map(p => p.id) || [])
+      ])
+
+      const parentsCount = allParentIds.size
 
       // Fetch posts count for this teacher
       const { count: postsCount, error: postsError } = await supabase
