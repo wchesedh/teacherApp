@@ -8,7 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { Plus, Users, BookOpen, GraduationCap, MessageSquare, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile, MoreHorizontal } from 'lucide-react'
+import { Plus, Users, BookOpen, GraduationCap, MessageSquare, Megaphone, ChevronDown, ChevronRight, Eye, Trash2, ThumbsUp, Heart, Star, Smile, MoreHorizontal } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
@@ -31,6 +31,7 @@ interface Stats {
   parents: number
   students: number
   posts: number
+  announcements: number
 }
 
 interface Class {
@@ -87,7 +88,8 @@ export default function TeacherDashboard() {
     classes: 0,
     parents: 0,
     students: 0,
-    posts: 0
+    posts: 0,
+    announcements: 0
   })
   const [classes, setClasses] = useState<Class[]>([])
   const [classAnnouncements, setClassAnnouncements] = useState<ClassAnnouncement[]>([])
@@ -195,11 +197,45 @@ export default function TeacherDashboard() {
         .select('*', { count: 'exact', head: true })
         .eq('teacher_id', user?.id)
 
+      // Calculate announcements count (posts with class_id but no student tags)
+      let announcementsCount = 0
+      if (classIds.length > 0) {
+        // Get posts that have class_id (announcements)
+        const { data: classPosts, error: classPostsError } = await supabase
+          .from('posts')
+          .select('id')
+          .eq('teacher_id', user?.id)
+          .not('class_id', 'is', null)
+          .in('class_id', classIds)
+
+        if (!classPostsError && classPosts) {
+          const classPostIds = classPosts.map(post => post.id)
+          
+          if (classPostIds.length > 0) {
+            // Get posts that are tagged with students
+            const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+              .from('post_student_tags')
+              .select('post_id')
+              .in('post_id', classPostIds)
+
+            if (!studentTagsError) {
+              const studentTaggedPostIds = studentTaggedPosts?.map(tag => tag.post_id) || []
+              // Announcements are class posts that are NOT tagged with students
+              announcementsCount = classPostIds.filter(id => !studentTaggedPostIds.includes(id)).length
+            } else {
+              // If we can't fetch student tags, assume all class posts are announcements
+              announcementsCount = classPostIds.length
+            }
+          }
+        }
+      }
+
       setStats({
         classes: classesCount || 0,
         parents: parentsCount,
         students: studentsCount || 0,
-        posts: postsCount || 0
+        posts: postsCount || 0,
+        announcements: announcementsCount
       })
 
       // Fetch classes with students and parents
@@ -531,8 +567,15 @@ export default function TeacherDashboard() {
       title: 'My Posts',
       value: stats.posts.toString(),
       icon: MessageSquare,
-      description: 'Posts you\'ve created',
+      description: 'Individual student posts',
       href: '/teacher/posts'
+    },
+    {
+      title: 'My Announcements',
+      value: stats.announcements.toString(),
+      icon: Megaphone,
+      description: 'Class-wide announcements',
+      href: '/teacher/announcements'
     }
   ]
 
@@ -848,7 +891,7 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-5 mb-8">
           {statsData.map((stat, index) => (
             <Card 
               key={index} 
