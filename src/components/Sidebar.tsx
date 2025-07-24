@@ -25,7 +25,7 @@ interface SidebarProps {
 
 export default function Sidebar({ className }: SidebarProps) {
   const { user, signOut } = useAuth()
-  const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard'])
+  const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard', 'management'])
   const [userProfile, setUserProfile] = useState<{
     avatar_url?: string
     first_name?: string
