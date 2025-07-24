@@ -510,25 +510,29 @@ export default function TeacherDashboard() {
       title: 'My Classes',
       value: stats.classes.toString(),
       icon: BookOpen,
-      description: 'Classes you teach'
+      description: 'Classes you teach',
+      href: '/teacher/classes'
     },
     {
       title: 'My Students\' Parents',
       value: stats.parents.toString(),
       icon: Users,
-      description: 'Parents of your students'
+      description: 'Parents of your students',
+      href: '/teacher/parents'
     },
     {
       title: 'My Students',
       value: stats.students.toString(),
       icon: GraduationCap,
-      description: 'Students in your classes'
+      description: 'Students in your classes',
+      href: '/teacher/students'
     },
     {
       title: 'My Posts',
       value: stats.posts.toString(),
       icon: MessageSquare,
-      description: 'Posts you\'ve created'
+      description: 'Posts you\'ve created',
+      href: '/teacher/posts'
     }
   ]
 
@@ -846,7 +850,11 @@ export default function TeacherDashboard() {
         {/* Stats Grid */}
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4 mb-8">
           {statsData.map((stat, index) => (
-            <Card key={index}>
+            <Card 
+              key={index} 
+              className="cursor-pointer hover:shadow-md transition-shadow duration-200 hover:border-blue-300"
+              onClick={() => window.location.href = stat.href}
+            >
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">
                   {stat.title}
