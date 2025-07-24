@@ -11,7 +11,8 @@ import {
   MessageSquare,
   GraduationCap,
   Users,
-  BookOpen
+  BookOpen,
+  Menu
 } from 'lucide-react'
 import { 
   DropdownMenu,
@@ -36,7 +37,12 @@ interface Notification {
   link?: string
 }
 
-export default function Navbar() {
+interface NavbarProps {
+  onToggleSidebar?: () => void
+  isSidebarCollapsed?: boolean
+}
+
+export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: NavbarProps) {
   const { user, signOut } = useAuth()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
@@ -299,11 +305,26 @@ export default function Navbar() {
   }
 
   return (
-    <nav className="bg-white border-b border-gray-200 px-6 py-3">
+    <nav className="bg-white border-b border-gray-200 p-4">
       <div className="flex items-center justify-between">
-        {/* Left side - App title */}
-        <div className="flex items-center space-x-4">
-          {/* TrackWise title removed to avoid redundancy with sidebar */}
+        {/* Left side - Sidebar toggle and empty space to align with sidebar */}
+        <div className="flex items-center space-x-3">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleSidebar}
+            className="p-2"
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 bg-transparent rounded-lg flex items-center justify-center">
+            </div>
+            <div>
+              <div className="h-5"></div>
+              <div className="h-3"></div>
+            </div>
+          </div>
         </div>
 
         {/* Right side - User menu */}
