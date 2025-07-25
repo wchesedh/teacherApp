@@ -20,7 +20,8 @@ import {
   Plus,
   MoreHorizontal,
   Edit,
-  Trash2
+  Trash2,
+  Phone
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Layout from '@/components/Layout'
@@ -30,6 +31,7 @@ interface Parent {
   id: string
   name: string
   email: string | null
+  phone: string | null
   password?: string
   created_at: string
   students?: Student[]
@@ -154,7 +156,7 @@ export default function TeacherParentsPage() {
     toast.success('Copied to clipboard')
   }
 
-  const handleEditParent = async (parentData: { id: string; name: string; email: string; password?: string }) => {
+  const handleEditParent = async (parentData: { id: string; name: string; email: string; phone?: string; password?: string }) => {
     try {
       // Check if parent with this email already exists (excluding current parent)
       const { data: existingParent, error: checkError } = await supabase
@@ -178,7 +180,8 @@ export default function TeacherParentsPage() {
       // Update parent data
       const updateData: any = {
         name: parentData.name.trim(),
-        email: parentData.email.trim()
+        email: parentData.email.trim(),
+        phone: parentData.phone?.trim() || null
       }
 
       // Only update password if provided
@@ -200,7 +203,12 @@ export default function TeacherParentsPage() {
       // Optimistic update
       setParents(prev => prev.map(parent => 
         parent.id === parentData.id 
-          ? { ...parent, name: parentData.name.trim(), email: parentData.email.trim() }
+          ? { 
+              ...parent, 
+              name: parentData.name.trim(), 
+              email: parentData.email.trim(),
+              phone: parentData.phone?.trim() || null
+            }
           : parent
       ))
 
@@ -262,7 +270,7 @@ export default function TeacherParentsPage() {
     }
   }
 
-  const handleAddParent = async (parentData: { name: string; email: string; password: string }) => {
+  const handleAddParent = async (parentData: { name: string; email: string; phone?: string; password: string }) => {
     try {
       // Check if parent with this email already exists
       const { data: existingParent, error: checkError } = await supabase
@@ -291,7 +299,8 @@ export default function TeacherParentsPage() {
         body: JSON.stringify({
           email: parentData.email.trim(),
           password: parentData.password.trim(),
-          name: parentData.name.trim()
+          name: parentData.name.trim(),
+          phone: parentData.phone?.trim() || null
         })
       })
 
@@ -321,6 +330,7 @@ export default function TeacherParentsPage() {
           id: result.parent.id,
           name: parentData.name.trim(),
           email: parentData.email.trim(),
+          phone: parentData.phone?.trim() || null,
           password: parentData.password.trim(),
           created_at: result.parent.created_at,
           students: []
@@ -341,7 +351,8 @@ export default function TeacherParentsPage() {
 
   const filteredParents = parents.filter(parent =>
     parent.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    (parent.email && parent.email.toLowerCase().includes(searchTerm.toLowerCase()))
+    (parent.email && parent.email.toLowerCase().includes(searchTerm.toLowerCase())) ||
+    (parent.phone && parent.phone.toLowerCase().includes(searchTerm.toLowerCase()))
   )
 
   return (
@@ -401,7 +412,7 @@ export default function TeacherParentsPage() {
           <div className="relative">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
             <Input
-              placeholder="Search parents by name or email..."
+              placeholder="Search parents by name, email, or Line ID..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="pl-10"
@@ -442,9 +453,17 @@ export default function TeacherParentsPage() {
                             </div>
                             <div>
                               <h3 className="font-medium text-gray-900">{parent.name}</h3>
-                              <div className="flex items-center space-x-2 text-sm text-gray-600">
-                                <Mail className="w-4 h-4" />
-                                <span>{parent.email}</span>
+                              <div className="flex items-center space-x-4 text-sm text-gray-600">
+                                <div className="flex items-center space-x-1">
+                                  <Mail className="w-4 h-4" />
+                                  <span>{parent.email}</span>
+                                </div>
+                                {parent.phone && (
+                                  <div className="flex items-center space-x-1">
+                                    <Phone className="w-4 h-4" />
+                                    <span>Line ID: {parent.phone}</span>
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -513,6 +532,21 @@ export default function TeacherParentsPage() {
                                 <Copy className="w-3 h-3" />
                               </Button>
                             </div>
+                            {parent.phone && (
+                              <div className="flex items-center space-x-2">
+                                <span className="text-sm text-gray-600">Line ID:</span>
+                                <span className="text-sm font-mono bg-white px-2 py-1 rounded border">
+                                  {parent.phone}
+                                </span>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => copyToClipboard(parent.phone || '')}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                            )}
                             <div className="flex items-center space-x-2">
                               <span className="text-sm text-gray-600">Password:</span>
                               {parent.password ? (
@@ -569,10 +603,11 @@ export default function TeacherParentsPage() {
 function AddParentForm({ 
   onSubmit 
 }: { 
-  onSubmit: (data: { name: string; email: string; password: string }) => void
+  onSubmit: (data: { name: string; email: string; phone?: string; password: string }) => void
 }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -603,7 +638,8 @@ function AddParentForm({
     setLoading(true)
     await onSubmit({ 
       name: name.trim(), 
-      email: email.trim(), 
+      email: email.trim(),
+      phone: phone.trim() || undefined,
       password: password.trim() 
     })
     setLoading(false)
@@ -611,6 +647,7 @@ function AddParentForm({
     // Reset form
     setName('')
     setEmail('')
+    setPhone('')
     setPassword('')
   }
 
@@ -645,6 +682,22 @@ function AddParentForm({
           Parents need email to log in and check their child's progress
         </p>
       </div>
+
+      <div className="space-y-2">
+        <label htmlFor="parentPhone" className="text-sm font-medium">
+          Line ID (Optional)
+        </label>
+        <Input
+          id="parentPhone"
+          type="text"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter Line ID (e.g., @username)"
+        />
+        <p className="text-xs text-gray-500">
+          Line ID for additional communication (optional)
+        </p>
+      </div>
       
       <div className="space-y-2">
         <label htmlFor="parentPassword" className="text-sm font-medium">
@@ -676,10 +729,11 @@ function EditParentForm({
   onSubmit 
 }: { 
   parent: Parent
-  onSubmit: (data: { id: string; name: string; email: string; password?: string }) => void
+  onSubmit: (data: { id: string; name: string; email: string; phone?: string; password?: string }) => void
 }) {
   const [name, setName] = useState(parent.name)
   const [email, setEmail] = useState(parent.email || '')
+  const [phone, setPhone] = useState(parent.phone || '')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -701,7 +755,8 @@ function EditParentForm({
     await onSubmit({ 
       id: parent.id,
       name: name.trim(), 
-      email: email.trim(), 
+      email: email.trim(),
+      phone: phone.trim() || undefined,
       password: password.trim() || undefined
     })
     setLoading(false)
@@ -709,6 +764,7 @@ function EditParentForm({
     // Reset form
     setName(parent.name)
     setEmail(parent.email || '')
+    setPhone(parent.phone || '')
     setPassword('')
   }
 
@@ -741,6 +797,22 @@ function EditParentForm({
         />
         <p className="text-xs text-gray-500">
           Parents need email to log in and check their child's progress
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label htmlFor="editParentPhone" className="text-sm font-medium">
+          Line ID (Optional)
+        </label>
+        <Input
+          id="editParentPhone"
+          type="text"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
+          placeholder="Enter Line ID (e.g., @username)"
+        />
+        <p className="text-xs text-gray-500">
+          Line ID for additional communication (optional)
         </p>
       </div>
       

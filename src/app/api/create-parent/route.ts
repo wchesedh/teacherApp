@@ -11,7 +11,7 @@ const supabaseAdmin = createClient(
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, name } = await request.json()
+    const { email, password, name, phone } = await request.json()
 
     if (!email || !password || !name) {
       return NextResponse.json(
@@ -84,6 +84,7 @@ export async function POST(request: NextRequest) {
         id: authData.user.id,
         name,
         email,
+        phone: phone || null,
         password // Store for teacher reference
       }])
       .select()
