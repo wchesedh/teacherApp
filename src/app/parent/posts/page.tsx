@@ -26,6 +26,16 @@ interface Post {
   student?: {
     id: string
     name: string
+    class?: {
+      id: string
+      name: string
+      academic_period?: {
+        id: string
+        name: string
+        type: string
+        school_year: string
+      }
+    }
   }
 }
 
@@ -79,13 +89,26 @@ export default function ParentPostsPage() {
           student_id,
           students (
             id,
-            name
+            name,
+            class_id
           ),
           posts (
             id,
             content,
             created_at,
-            teacher_id
+            teacher_id,
+            class_id,
+            classes (
+              id,
+              name,
+              academic_period_id,
+              academic_periods (
+                id,
+                name,
+                type,
+                school_year
+              )
+            )
           )
         `)
         .in('student_id', studentIds)
@@ -101,13 +124,24 @@ export default function ParentPostsPage() {
         // Transform posts data and remove duplicates
         const postsData = tagData
           .filter((item: any) => item.posts) // Filter out null posts
-          .map((item: any) => ({
-            id: item.posts.id,
-            content: item.posts.content,
-            created_at: item.posts.created_at,
-            teacher_id: item.posts.teacher_id,
-            student: item.students
-          }))
+          .map((item: any) => {
+            const classData = item.posts?.classes
+            return {
+              id: item.posts.id,
+              content: item.posts.content,
+              created_at: item.posts.created_at,
+              teacher_id: item.posts.teacher_id,
+              student: {
+                id: item.students.id,
+                name: item.students.name,
+                class: classData ? {
+                  id: classData.id,
+                  name: classData.name,
+                  academic_period: classData.academic_periods
+                } : undefined
+              }
+            }
+          })
         
         // Remove duplicates based on post ID
         const uniquePosts = postsData.filter((post, index, self) => 
@@ -212,9 +246,21 @@ export default function ParentPostsPage() {
                             </span>
                           )}
                           {post.student && (
-                            <Badge variant="outline" className="text-xs">
-                              {post.student.name}
-                            </Badge>
+                            <div className="flex items-center space-x-1">
+                              <Badge variant="outline" className="text-xs">
+                                {post.student.name}
+                              </Badge>
+                              {post.student.class && (
+                                <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
+                                  📚 {post.student.class.name}
+                                </Badge>
+                              )}
+                              {post.student.class?.academic_period && (
+                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border border-green-200">
+                                  📅 {post.student.class.academic_period.name}
+                                </Badge>
+                              )}
+                            </div>
                           )}
                         </div>
                         <CardDescription className="flex items-center space-x-2 mt-1">

@@ -1,8 +1,10 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { 
   User, 
   LogOut,
@@ -12,7 +14,8 @@ import {
   GraduationCap,
   Users,
   BookOpen,
-  Menu
+  Menu,
+  Calendar
 } from 'lucide-react'
 import { 
   DropdownMenu,
@@ -44,6 +47,7 @@ interface NavbarProps {
 
 export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: NavbarProps) {
   const { user, signOut } = useAuth()
+  const { activePeriod } = useActivePeriod()
   const router = useRouter()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -329,6 +333,23 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: 
 
         {/* Right side - User menu */}
         <div className="flex items-center space-x-4">
+          {/* Active Period Indicator */}
+          {activePeriod && user?.role === 'teacher' && (
+            <div className="flex items-center space-x-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push('/teacher/academic-periods')}
+                className="hover:bg-green-50"
+              >
+                <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  <Calendar className="w-3 h-3 mr-1" />
+                  {activePeriod.name}
+                </Badge>
+              </Button>
+            </div>
+          )}
+          
           {/* Notifications */}
           <DropdownMenu open={showNotifications} onOpenChange={setShowNotifications}>
             <DropdownMenuTrigger asChild>

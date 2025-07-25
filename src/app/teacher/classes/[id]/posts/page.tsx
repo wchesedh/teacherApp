@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { MessageSquare, Plus, Calendar, User, ArrowLeft } from "lucide-react";
@@ -32,6 +33,16 @@ interface Post {
     id: string;
     name: string;
     email: string;
+  };
+  class?: {
+    id: string;
+    name: string;
+    academic_period?: {
+      id: string;
+      name: string;
+      type: string;
+      school_year: string;
+    };
   };
   reactions?: {
     thumbs_up: number;
@@ -109,6 +120,17 @@ export default function ClassPostsPage() {
             id,
             name,
             email
+          ),
+          classes (
+            id,
+            name,
+            academic_period_id,
+            academic_periods (
+              id,
+              name,
+              type,
+              school_year
+            )
           )
         `)
         .eq("class_id", classId)
@@ -137,6 +159,11 @@ export default function ClassPostsPage() {
           return {
             ...post,
             teacher: post.teachers,
+            class: post.classes ? {
+              id: post.classes.id,
+              name: post.classes.name,
+              academic_period: post.classes.academic_periods
+            } : undefined,
             reactions,
           };
         }));
@@ -332,6 +359,11 @@ export default function ClassPostsPage() {
                         <span className="text-sm font-medium text-gray-900">
                           {post.teacher?.name || "Unknown Teacher"}
                         </span>
+                        {post.class?.academic_period && (
+                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border border-green-200">
+                            📅 {post.class.academic_period.name}
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center space-x-2">
                         <Calendar className="w-4 h-4 text-gray-500" />

@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Calendar } from 'lucide-react'
 import { supabase, AcademicPeriod } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import { toast } from 'sonner'
 
 interface Class {
@@ -26,10 +27,12 @@ interface Class {
 
 export default function ClassManagement() {
   const { user } = useAuth()
+  const { activePeriod } = useActivePeriod()
   const [classes, setClasses] = useState<Class[]>([])
   const [academicPeriods, setAcademicPeriods] = useState<AcademicPeriod[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('active')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingClass, setEditingClass] = useState<Class | null>(null)
@@ -41,6 +44,13 @@ export default function ClassManagement() {
       fetchAcademicPeriods()
     }
   }, [user])
+
+  // Set default filter to active period when it changes
+  useEffect(() => {
+    if (activePeriod) {
+      setSelectedPeriodFilter('active')
+    }
+  }, [activePeriod])
 
   const fetchClassesOptimized = async () => {
     if (!user) {
@@ -91,9 +101,22 @@ export default function ClassManagement() {
     }
   }
 
-  const filteredClasses = classes.filter(classItem =>
-    classItem.name.toLowerCase().includes(searchTerm.toLowerCase())
-  )
+  const filteredClasses = classes.filter(classItem => {
+    // Filter by search term
+    const matchesSearch = classItem.name.toLowerCase().includes(searchTerm.toLowerCase())
+    
+    // Filter by academic period
+    let matchesPeriod = true
+    if (selectedPeriodFilter === 'active') {
+      matchesPeriod = classItem.academic_period_id === activePeriod?.id
+    } else if (selectedPeriodFilter === 'all') {
+      matchesPeriod = true
+    } else {
+      matchesPeriod = classItem.academic_period_id === selectedPeriodFilter
+    }
+    
+    return matchesSearch && matchesPeriod
+  })
 
   const handleAddClass = async (classData: { name: string; academic_period_id?: string }) => {
     try {
@@ -226,7 +249,14 @@ export default function ClassManagement() {
           <div>
             <CardTitle>My Classes</CardTitle>
             <CardDescription>
-              Manage your classes ({classes.length} classes)
+              Manage your classes ({filteredClasses.length} of {classes.length} classes)
+              {selectedPeriodFilter === 'active' && activePeriod && (
+                <span className="ml-2">
+                  • Filtered by <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                    📅 {activePeriod.name}
+                  </Badge>
+                </span>
+              )}
             </CardDescription>
           </div>
           <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -249,16 +279,57 @@ export default function ClassManagement() {
         </div>
       </CardHeader>
       <CardContent>
-        {/* Search */}
-        <div className="mb-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
-            <Input
-              placeholder="Search classes..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10"
-            />
+        {/* Search and Filters */}
+        <div className="mb-4 space-y-4">
+          <div className="flex items-center space-x-4">
+            {/* Search */}
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+              <Input
+                placeholder="Search classes..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10"
+              />
+            </div>
+            
+            {/* Academic Period Filter */}
+            <div className="flex items-center space-x-2">
+              <span className="text-sm font-medium text-gray-700">Period:</span>
+              <Select value={selectedPeriodFilter} onValueChange={setSelectedPeriodFilter}>
+                <SelectTrigger className="w-48">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="active">
+                    <div className="flex items-center space-x-2">
+                      <Calendar className="w-4 h-4" />
+                      <span>
+                        {activePeriod ? activePeriod.name : 'Active Period'}
+                      </span>
+                    </div>
+                  </SelectItem>
+                  <SelectItem value="all">
+                    <div className="flex items-center space-x-2">
+                      <span>📚 All Periods</span>
+                    </div>
+                  </SelectItem>
+                  {academicPeriods.map((period) => (
+                    <SelectItem key={period.id} value={period.id}>
+                      <div className="flex items-center space-x-2">
+                        <Calendar className="w-4 h-4" />
+                        <span>{period.name}</span>
+                        {period.is_active && (
+                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800">
+                            Active
+                          </Badge>
+                        )}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
         </div>
 

@@ -12,10 +12,12 @@ import {
   Edit,
   Trash2,
   MoreHorizontal,
-  ExternalLink
+  ExternalLink,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
+import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
@@ -32,6 +34,7 @@ interface Post {
   created_at: string
   teacher_id: string
   post_type: 'student_post' | 'announcement'
+  class_id?: string
   students?: {
     id: string
     name: string
@@ -39,6 +42,12 @@ interface Post {
     class?: {
       id: string
       name: string
+      academic_period?: {
+        id: string
+        name: string
+        type: string
+        school_year: string
+      }
     }
   }[]
   reactions?: {
@@ -61,6 +70,7 @@ interface Student {
 
 export default function TeacherPostsPage() {
   const { user } = useAuth()
+  const { activePeriod } = useActivePeriod()
   const [posts, setPosts] = useState<Post[]>([])
   const [students, setStudents] = useState<Student[]>([])
   const [loading, setLoading] = useState(true)
@@ -81,10 +91,15 @@ export default function TeacherPostsPage() {
   const [selectedPost, setSelectedPost] = useState<Post | null>(null)
 
   useEffect(() => {
-    if (user) {
+    console.log('TeacherPostsPage useEffect - user:', user?.id, 'activePeriod:', activePeriod?.name)
+    if (user && activePeriod) {
       fetchPosts()
+    } else if (user && !activePeriod) {
+      console.log('No active period, clearing posts')
+      setPosts([])
+      setLoading(false)
     }
-  }, [user])
+  }, [user, activePeriod])
 
   const fetchPosts = async () => {
     if (!user) {
@@ -93,16 +108,61 @@ export default function TeacherPostsPage() {
       return
     }
 
+    if (!activePeriod) {
+      console.log('No active period, skipping fetchPosts')
+      setPosts([])
+      setLoading(false)
+      return
+    }
+
     try {
       setLoading(true)
-      console.log('Fetching posts for teacher:', user.id)
+      console.log('Fetching posts for teacher:', user.id, 'in active period:', activePeriod.name, 'period ID:', activePeriod.id)
 
-      // First, get all posts created by this teacher
+      // First, get the teacher's classes in the active academic period
+      const { data: teacherClasses, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', user.id)
+        .eq('academic_period_id', activePeriod.id)
+
+      if (classesError) {
+        console.error('Error fetching teacher classes:', classesError)
+        toast.error('Error fetching posts')
+        return
+      }
+
+      const classIds = teacherClasses?.map(c => c.id) || []
+      console.log('Teacher classes in active period:', classIds)
+
+      if (classIds.length === 0) {
+        setPosts([])
+        setLoading(false)
+        return
+      }
+
+      // Get all posts created by this teacher that belong to classes in the active academic period
       const { data: allPostsData, error: allPostsError } = await supabase
         .from('posts')
-        .select('*')
+        .select(`
+          *,
+          classes (
+            id,
+            name,
+            academic_period_id,
+            academic_periods (
+              id,
+              name,
+              type,
+              school_year
+            )
+          )
+        `)
         .eq('teacher_id', user.id)
+        .in('class_id', classIds)
         .order('created_at', { ascending: false })
+
+      console.log('Posts query result:', allPostsData?.length || 0, 'posts found')
 
       if (allPostsError) {
         console.error('Error fetching all posts:', allPostsError)
@@ -159,7 +219,14 @@ export default function TeacherPostsPage() {
                 class_id,
                 classes (
                   id,
-                  name
+                  name,
+                  academic_period_id,
+                  academic_periods (
+                    id,
+                    name,
+                    type,
+                    school_year
+                  )
                 )
               )
             `)
@@ -172,11 +239,16 @@ export default function TeacherPostsPage() {
 
           // Transform the data to get students with class information from the post
           const studentsWithClasses = (tagData || []).map((tag: any) => {
+            const classData = tag.posts?.classes
             return {
               id: tag.students.id,
               name: tag.students.name,
               class_id: tag.students.class_id,
-              class: tag.posts?.classes || undefined // Get class from the post
+              class: classData ? {
+                id: classData.id,
+                name: classData.name,
+                academic_period: classData.academic_periods
+              } : undefined
             }
           })
 
@@ -212,15 +284,16 @@ export default function TeacherPostsPage() {
   }
 
   const fetchStudents = async () => {
-    if (!user) return
+    if (!user || !activePeriod) return
 
     try {
       setStudentsLoading(true)
-      // First, get the teacher's classes
+      // First, get the teacher's classes in the active academic period
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('id')
         .eq('teacher_id', user.id)
+        .eq('academic_period_id', activePeriod.id)
 
       if (classesError) {
         console.error('Error fetching classes:', classesError)
@@ -565,8 +638,25 @@ export default function TeacherPostsPage() {
               </h1>
               <p className="text-gray-600 mt-2">
                 View and manage posts tagged with specific students
+                {activePeriod && (
+                  <span className="ml-2">
+                    • <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                      📅 {activePeriod.name}
+                    </Badge>
+                  </span>
+                )}
               </p>
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={fetchPosts}
+              disabled={loading}
+              className="flex items-center space-x-2"
+            >
+              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+              <span>Refresh</span>
+            </Button>
           </div>
         </div>
 
@@ -575,9 +665,14 @@ export default function TeacherPostsPage() {
             <CardContent className="p-8">
               <div className="text-center">
                 <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Student Posts Yet</h3>
+                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                  {activePeriod ? `No Student Posts in ${activePeriod.name}` : 'No Student Posts Yet'}
+                </h3>
                 <p className="text-gray-600">
-                  Create posts tagged with specific students to share updates with their parents.
+                  {activePeriod 
+                    ? `No posts found for the current academic period (${activePeriod.name}). Create posts tagged with specific students to share updates with their parents.`
+                    : 'Create posts tagged with specific students to share updates with their parents.'
+                  }
                 </p>
               </div>
             </CardContent>
@@ -611,6 +706,11 @@ export default function TeacherPostsPage() {
                                     {student.class && (
                                       <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
                                         📚 {student.class.name}
+                                      </Badge>
+                                    )}
+                                    {student.class?.academic_period && (
+                                      <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border border-green-200">
+                                        📅 {student.class.academic_period.name}
                                       </Badge>
                                     )}
                                   </div>

@@ -13,7 +13,8 @@ import {
   Settings,
   ChevronDown,
   ChevronRight,
-  User
+  User,
+  Calendar
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -138,6 +139,7 @@ export default function Sidebar({ className, isCollapsed = false }: SidebarProps
         { title: 'My Classes', href: '/teacher/classes', icon: BookOpen },
         { title: 'Parents', href: '/teacher/parents', icon: Users },
         { title: 'Students', href: '/teacher/students', icon: GraduationCap },
+        { title: 'Academic Periods', href: '/teacher/academic-periods', icon: Calendar },
       ]
     },
     {
