@@ -453,16 +453,16 @@ export default function TeacherParentsPage() {
                             </div>
                             <div>
                               <h3 className="font-medium text-gray-900">{parent.name}</h3>
-                              <div className="flex items-center space-x-4 text-sm text-gray-600">
-                                <div className="flex items-center space-x-1">
-                                  <Mail className="w-4 h-4" />
-                                  <span>{parent.email}</span>
-                                </div>
+                              <div className="flex items-center space-x-2 mt-1">
+                                <Badge variant="secondary" className="flex items-center gap-1 bg-blue-600 text-white">
+                                  <Mail className="w-3 h-3" />
+                                  {parent.email}
+                                </Badge>
                                 {parent.phone && (
-                                  <div className="flex items-center space-x-1">
-                                    <Phone className="w-4 h-4" />
-                                    <span>Line ID: {parent.phone}</span>
-                                  </div>
+                                  <Badge variant="outline" className="flex items-center gap-1 bg-green-600 text-white border-green-600">
+                                    <Phone className="w-3 h-3" />
+                                    {parent.phone}
+                                  </Badge>
                                 )}
                               </div>
                             </div>
