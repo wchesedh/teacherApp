@@ -33,6 +33,11 @@ interface Post {
   students?: {
     id: string
     name: string
+    class_id?: string
+    class?: {
+      id: string
+      name: string
+    }
   }[]
   reactions?: {
     thumbs_up: number
@@ -142,7 +147,18 @@ export default function TeacherPostsPage() {
               student_id,
               students (
                 id,
-                name
+                name,
+                class_id
+              ),
+              posts (
+                id,
+                content,
+                created_at,
+                class_id,
+                classes (
+                  id,
+                  name
+                )
               )
             `)
             .eq('post_id', post.id)
@@ -152,7 +168,17 @@ export default function TeacherPostsPage() {
             return { ...post, students: [] }
           }
 
-          const students = tagData?.map((tag: any) => tag.students) || []
+          // Transform the data to get students with class information from the post
+          const studentsWithClasses = (tagData || []).map((tag: any) => {
+            return {
+              id: tag.students.id,
+              name: tag.students.name,
+              class_id: tag.students.class_id,
+              class: tag.posts?.classes || undefined // Get class from the post
+            }
+          })
+
+          const students = studentsWithClasses
           
           // Fetch reactions for this post
           const { data: reactionCounts, error: reactionCountsError } = await supabase
@@ -208,26 +234,78 @@ export default function TeacherPostsPage() {
       }
 
       // Then get all students in this teacher's classes
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
+      // Fetch students using student_class table
+      const { data: studentClassesData, error: studentClassesError } = await supabase
+        .from('student_class')
         .select(`
-          id,
-          name,
-          class_id,
-          classes (
+          student_id,
+          students!student_class_student_id_fkey (
             id,
-            name
+            name,
+            class_id
           )
         `)
         .in('class_id', classIds)
 
-      if (studentsError) {
-        console.error('Error fetching students:', studentsError)
+      if (studentClassesError) {
+        console.error('Error fetching students:', studentClassesError)
         toast.error('Error loading students')
         return
       }
 
-      setStudents(studentsData || [])
+      // Transform the data to get students with their classes
+      const studentsWithClasses = await Promise.all(
+        (studentClassesData || []).map(async (sc: any) => {
+          // Get all classes for this student using student_class table
+          const { data: studentClassesData, error: studentClassesError } = await supabase
+            .from('student_class')
+            .select(`
+              classes!student_class_class_id_fkey (
+                id,
+                name
+              )
+            `)
+            .eq('student_id', sc.students.id)
+
+          if (studentClassesError) {
+            console.error('Error fetching classes for student:', sc.students.id, studentClassesError)
+            // Fallback to single class if student_class table fails
+            const { data: singleClassData, error: singleClassError } = await supabase
+              .from('classes')
+              .select('id, name')
+              .eq('id', sc.students.class_id)
+              .single()
+
+            if (singleClassError) {
+              console.error('Error fetching single class for student:', sc.students.id, singleClassError)
+              return {
+                id: sc.students.id,
+                name: sc.students.name,
+                class_id: sc.students.class_id,
+                class: undefined
+              }
+            }
+
+            return {
+              id: sc.students.id,
+              name: sc.students.name,
+              class_id: sc.students.class_id,
+              class: singleClassData || undefined
+            }
+          }
+
+          const classes = studentClassesData?.map((sc: any) => sc.classes) || []
+          
+          return {
+            id: sc.students.id,
+            name: sc.students.name,
+            class_id: sc.students.class_id,
+            class: classes[0] || undefined // Get the first class
+          }
+        })
+      )
+
+      setStudents(studentsWithClasses)
     } catch (error) {
       console.error('Error fetching students:', error)
       toast.error('Error loading students')
@@ -517,15 +595,19 @@ export default function TeacherPostsPage() {
                           <span className="text-sm font-medium text-blue-600">
                             You
                           </span>
-                          <Badge variant={post.post_type === 'announcement' ? 'default' : 'secondary'} className="text-xs">
-                            {post.post_type === 'announcement' ? 'Announcement' : 'Student Post'}
-                          </Badge>
                           {post.students && post.students.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
+                            <div className="flex flex-wrap gap-2">
                               {post.students.map((student) => (
-                                <Badge key={student.id} variant="outline" className="text-xs">
-                                  {student.name}
-                                </Badge>
+                                <div key={student.id} className="flex items-center space-x-1">
+                                  <Badge variant="outline" className="text-xs">
+                                    {student.name}
+                                  </Badge>
+                                  {student.class && (
+                                    <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
+                                      📚 {student.class.name}
+                                    </Badge>
+                                  )}
+                                </div>
                               ))}
                             </div>
                           )}
@@ -684,7 +766,10 @@ export default function TeacherPostsPage() {
                               className="rounded"
                             />
                             <span className="text-sm">
-                              {student.name} ({student.class?.name})
+                              {student.name}
+                              {student.class && (
+                                <span className="text-purple-600 ml-1">({student.class.name})</span>
+                              )}
                             </span>
                           </label>
                         ))
