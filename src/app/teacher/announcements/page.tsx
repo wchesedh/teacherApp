@@ -1,8 +1,10 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { MessageSquare, ThumbsUp, Heart, Star, Smile, Users, MoreVertical, Edit, Trash2 } from 'lucide-react'
@@ -38,10 +40,21 @@ interface Teacher {
 interface Class {
   id: string
   name: string
+  academic_period?: AcademicPeriod
+}
+
+interface AcademicPeriod {
+  id: string
+  name: string
+  type: string
+  start_date: string
+  end_date: string
+  school_year: string
 }
 
 export default function TeacherAnnouncementsPage() {
   const { user } = useAuth()
+  const { activePeriod } = useActivePeriod()
   const [announcements, setAnnouncements] = useState<ClassAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
   const [showReactorsDialog, setShowReactorsDialog] = useState(false)
@@ -56,20 +69,21 @@ export default function TeacherAnnouncementsPage() {
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
-    if (user) {
+    if (user && activePeriod) {
       fetchAnnouncements()
     }
-  }, [user])
+  }, [user, activePeriod])
 
   const fetchAnnouncements = async () => {
     try {
       setLoading(true)
       
-      // Get teacher's class IDs
+      // Get teacher's class IDs in the active academic period
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('id')
         .eq('teacher_id', user?.id)
+        .eq('academic_period_id', activePeriod?.id)
 
       if (classesError) {
         console.error('Error fetching teacher classes:', classesError)
@@ -83,7 +97,7 @@ export default function TeacherAnnouncementsPage() {
         return
       }
 
-      // Fetch class announcements (posts with class_id)
+      // Fetch class announcements (posts with class_id) with academic period info
       const { data: announcementsData, error: announcementsError } = await supabase
         .from('posts')
         .select(`
@@ -101,7 +115,15 @@ export default function TeacherAnnouncementsPage() {
           ),
           classes (
             id,
-            name
+            name,
+            academic_periods (
+              id,
+              name,
+              type,
+              start_date,
+              end_date,
+              school_year
+            )
           )
         `)
         .in('class_id', classIds)
@@ -152,7 +174,10 @@ export default function TeacherAnnouncementsPage() {
               content: item.content,
               created_at: item.created_at,
               teacher: item.teachers,
-              class: item.classes,
+              class: {
+                ...item.classes,
+                academic_period: item.classes.academic_periods
+              },
               image_url: item.image_url,
               file_url: item.file_url,
               file_name: item.file_name,
@@ -210,7 +235,10 @@ export default function TeacherAnnouncementsPage() {
             content: item.content,
             created_at: item.created_at,
             teacher: item.teachers,
-            class: item.classes,
+            class: {
+              ...item.classes,
+              academic_period: item.classes.academic_periods
+            },
             image_url: item.image_url,
             file_url: item.file_url,
             file_name: item.file_name,
@@ -341,6 +369,21 @@ export default function TeacherAnnouncementsPage() {
     }
   }
 
+  if (!activePeriod) {
+    return (
+      <Layout>
+        <div className="p-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading academic period...</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
   if (loading) {
     return (
       <Layout>
@@ -406,6 +449,11 @@ export default function TeacherAnnouncementsPage() {
                           <span className="text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
                             {announcement.class.name}
                           </span>
+                        )}
+                        {announcement.class?.academic_period && (
+                          <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border-green-200">
+                            📅 {announcement.class.academic_period.name}
+                          </Badge>
                         )}
                         <span className="text-sm text-gray-500">
                           {new Date(announcement.created_at).toLocaleDateString('en-US', { 
