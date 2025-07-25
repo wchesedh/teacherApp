@@ -10,19 +10,9 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye, Calendar } from 'lucide-react'
-import { supabase } from '@/lib/supabase'
+import { supabase, AcademicPeriod } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
-
-interface AcademicPeriod {
-  id: string
-  name: string
-  type: string
-  school_year: string
-  start_date: string
-  end_date: string
-  is_active: boolean
-}
 
 interface Class {
   id: string

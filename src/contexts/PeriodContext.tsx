@@ -1,15 +1,7 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface AcademicPeriod {
-  id: string
-  name: string
-  type: string
-  school_year: string
-  is_active: boolean
-}
+import { supabase, AcademicPeriod } from '@/lib/supabase'
 
 interface PeriodContextType {
   periods: AcademicPeriod[]

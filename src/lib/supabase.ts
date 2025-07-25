@@ -94,6 +94,18 @@ export interface PostStudentTag {
   student_id: string
 }
 
+export interface AcademicPeriod {
+  id: string
+  name: string
+  type: 'semester' | 'quarter' | 'trimester' | 'term'
+  start_date: string
+  end_date: string
+  is_active: boolean
+  school_year: string
+  created_at?: string
+  updated_at?: string
+}
+
 // Authentication helpers
 export async function signUp(email: string, password: string, name: string, role: UserRole) {
   const { data, error } = await supabase.auth.signUp({
