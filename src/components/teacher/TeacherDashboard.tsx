@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/contexts/AuthContext'
+import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -84,6 +85,7 @@ interface Teacher {
 
 export default function TeacherDashboard() {
   const { user } = useAuth()
+  const { activePeriod } = useActivePeriod()
   const [stats, setStats] = useState<Stats>({
     classes: 0,
     parents: 0,
@@ -110,24 +112,28 @@ export default function TeacherDashboard() {
   const [selectedAnnouncement, setSelectedAnnouncement] = useState<ClassAnnouncement | null>(null);
 
   useEffect(() => {
-    fetchData()
-  }, [])
+    if (user && activePeriod) {
+      fetchData()
+    }
+  }, [user, activePeriod])
 
   const fetchData = async () => {
     try {
       setLoading(true)
       
-      // Fetch classes count for this teacher
+      // Fetch classes count for this teacher in the active academic period
       const { count: classesCount, error: classesError } = await supabase
         .from('classes')
         .select('*', { count: 'exact', head: true })
         .eq('teacher_id', user?.id)
+        .eq('academic_period_id', activePeriod?.id)
 
-      // First, get the teacher's classes
+      // First, get the teacher's classes in the active academic period
       const { data: classesData, error: classesDataError } = await supabase
         .from('classes')
         .select('id')
         .eq('teacher_id', user?.id)
+        .eq('academic_period_id', activePeriod?.id)
 
       if (classesDataError) {
         console.error('Error fetching classes for stats:', classesDataError)
@@ -262,11 +268,12 @@ export default function TeacherDashboard() {
 
   const fetchClassesWithDetails = async () => {
     try {
-      // Fetch teacher's classes
+      // Fetch teacher's classes in the active academic period
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('*')
         .eq('teacher_id', user?.id)
+        .eq('academic_period_id', activePeriod?.id)
         .order('created_at', { ascending: false })
 
       if (classesError) {
@@ -352,11 +359,12 @@ export default function TeacherDashboard() {
 
   const fetchClassAnnouncements = async () => {
     try {
-      // Get teacher's class IDs
+      // Get teacher's class IDs in the active academic period
       const { data: classesData, error: classesError } = await supabase
         .from('classes')
         .select('id')
         .eq('teacher_id', user?.id)
+        .eq('academic_period_id', activePeriod?.id)
 
       if (classesError) {
         console.error('Error fetching teacher classes:', classesError)
@@ -880,6 +888,21 @@ export default function TeacherDashboard() {
     }
   };
 
+  if (!activePeriod) {
+    return (
+      <Layout>
+        <div className="p-8">
+          <div className="flex items-center justify-center h-64">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+              <p className="mt-2 text-gray-600">Loading academic period...</p>
+            </div>
+          </div>
+        </div>
+      </Layout>
+    )
+  }
+
   return (
     <Layout>
       <div className="p-8">
@@ -890,6 +913,13 @@ export default function TeacherDashboard() {
           </h1>
           <p className="text-gray-600 mt-2">
             Manage your classes, students, and communicate with parents
+            {activePeriod && (
+              <span className="ml-2">
+                • <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
+                  📅 {activePeriod.name}
+                </Badge>
+              </span>
+            )}
           </p>
         </div>
 
@@ -920,27 +950,27 @@ export default function TeacherDashboard() {
         </div>
 
         {/* Class Announcements Section */}
-        {classAnnouncements.length > 0 && (
-          <Card className="mb-6">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="flex items-center space-x-2">
-                    <MessageSquare className="w-5 h-5" />
-                    <span>Recent Class Announcements</span>
-                  </CardTitle>
-                  <CardDescription>
-                    Your recent class-wide announcements and parent reactions
-                  </CardDescription>
-                </div>
-                <Link href="/teacher/announcements">
-                  <Button variant="outline" size="sm">
-                    View All Announcements
-                  </Button>
-                </Link>
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center space-x-2">
+                  <MessageSquare className="w-5 h-5" />
+                  <span>Recent Class Announcements</span>
+                </CardTitle>
+                <CardDescription>
+                  Your recent class-wide announcements and parent reactions
+                </CardDescription>
               </div>
-            </CardHeader>
-            <CardContent>
+              <Link href="/teacher/announcements">
+                <Button variant="outline" size="sm">
+                  View All Announcements
+                </Button>
+              </Link>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {classAnnouncements.length > 0 ? (
               <div className="space-y-4">
                 {classAnnouncements.slice(0, 3).map((announcement) => (
                   <div key={announcement.id} className="border rounded-lg p-4">
@@ -1060,9 +1090,15 @@ export default function TeacherDashboard() {
                   </div>
                 ))}
               </div>
+            ) : (
+              <div className="text-center py-8">
+                <MessageSquare className="w-12 h-12 mx-auto text-gray-300 mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 mb-2">No announcements</h3>
+                <p className="text-gray-500">You haven't made any class announcements yet.</p>
+              </div>
+            )}
             </CardContent>
           </Card>
-        )}
 
         {/* Classes Management */}
         <Card className="overflow-hidden">
