@@ -159,6 +159,8 @@ export default function StudentProfilePage({
     }
   }, [student, classInfo])
 
+
+
   const handleClassSelection = async (classId: string) => {
     if (!user) return
     

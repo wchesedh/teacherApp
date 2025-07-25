@@ -11,7 +11,8 @@ import {
   Plus,
   Edit,
   Trash2,
-  MoreHorizontal
+  MoreHorizontal,
+  ExternalLink
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -23,6 +24,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
+import Link from 'next/link'
 
 interface Post {
   id: string
@@ -583,124 +585,165 @@ export default function TeacherPostsPage() {
         ) : (
           <div className="space-y-6">
             {posts.map((post) => (
-              <Card key={post.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                        <MessageSquare className="w-5 h-5 text-blue-600" />
-                      </div>
-                      <div>
-                        <div className="flex items-center space-x-2">
-                          <span className="text-sm font-medium text-blue-600">
-                            You
-                          </span>
-                          {post.students && post.students.length > 0 && (
-                            <div className="flex flex-wrap gap-2">
-                              {post.students.map((student) => (
-                                <div key={student.id} className="flex items-center space-x-1">
-                                  <Badge variant="outline" className="text-xs">
-                                    {student.name}
-                                  </Badge>
-                                  {student.class && (
-                                    <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
-                                      📚 {student.class.name}
-                                    </Badge>
-                                  )}
-                                </div>
-                              ))}
-                            </div>
-                          )}
+              <Card key={post.id} className="hover:shadow-md transition-shadow group">
+                <Link 
+                  href={`/teacher/students/${post.students?.[0]?.id}?classId=${post.students?.[0]?.class?.id || ''}`}
+                  className="block"
+                >
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center space-x-3">
+                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                          <MessageSquare className="w-5 h-5 text-blue-600" />
                         </div>
-                        <CardDescription className="flex items-center space-x-2 mt-1">
-                          <Calendar className="w-3 h-3" />
-                          <span>{new Date(post.created_at).toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true
-                          })}</span>
-                        </CardDescription>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-blue-600">
+                              You
+                            </span>
+                            {post.students && post.students.length > 0 && (
+                              <div className="flex flex-wrap gap-2">
+                                {post.students.map((student) => (
+                                  <div key={student.id} className="flex items-center space-x-1">
+                                    <Badge variant="outline" className="text-xs">
+                                      {student.name}
+                                    </Badge>
+                                    {student.class && (
+                                      <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
+                                        📚 {student.class.name}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                          <CardDescription className="flex items-center space-x-2 mt-1">
+                            <Calendar className="w-3 h-3" />
+                            <span>{new Date(post.created_at).toLocaleDateString('en-US', { 
+                              weekday: 'long', 
+                              year: 'numeric', 
+                              month: 'long', 
+                              day: 'numeric',
+                              hour: 'numeric',
+                              minute: '2-digit',
+                              hour12: true
+                            })}</span>
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="opacity-0 group-hover:opacity-100 transition-opacity">
+                        <ExternalLink className="h-4 w-4 text-gray-400" />
                       </div>
                     </div>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" className="h-8 w-8 p-0">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => openEditDialog(post)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          Edit Post
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          className="text-red-600"
-                          onClick={() => handleDeletePost(post.id)}
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete Post
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
-                    {post.content}
-                  </p>
-                  {post.reactions && (
-                    <div className="flex items-center space-x-4 text-sm text-gray-500 mt-3">
-                      {post.reactions.thumbs_up > 0 && (
-                        <button
-                          type="button"
-                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
-                          onClick={() => fetchReactors(post.id, 'thumbs_up')}
-                          title="See who reacted"
-                        >
-                          {getReactionIcon('thumbs_up')}
-                          <span>{post.reactions.thumbs_up}</span>
-                        </button>
-                      )}
-                      {post.reactions.heart > 0 && (
-                        <button
-                          type="button"
-                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
-                          onClick={() => fetchReactors(post.id, 'heart')}
-                          title="See who reacted"
-                        >
-                          {getReactionIcon('heart')}
-                          <span>{post.reactions.heart}</span>
-                        </button>
-                      )}
-                      {post.reactions.clap > 0 && (
-                        <button
-                          type="button"
-                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
-                          onClick={() => fetchReactors(post.id, 'clap')}
-                          title="See who reacted"
-                        >
-                          {getReactionIcon('clap')}
-                          <span>{post.reactions.clap}</span>
-                        </button>
-                      )}
-                      {post.reactions.smile > 0 && (
-                        <button
-                          type="button"
-                          className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
-                          onClick={() => fetchReactors(post.id, 'smile')}
-                          title="See who reacted"
-                        >
-                          {getReactionIcon('smile')}
-                          <span>{post.reactions.smile}</span>
-                        </button>
-                      )}
-                    </div>
-                  )}
-                </CardContent>
+                  </CardHeader>
+                  <CardContent>
+                    <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
+                      {post.content}
+                    </p>
+                    {post.reactions && (
+                      <div className="flex items-center space-x-4 text-sm text-gray-500 mt-3">
+                        {post.reactions.thumbs_up > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              fetchReactors(post.id, 'thumbs_up')
+                            }}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('thumbs_up')}
+                            <span>{post.reactions.thumbs_up}</span>
+                          </button>
+                        )}
+                        {post.reactions.heart > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              fetchReactors(post.id, 'heart')
+                            }}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('heart')}
+                            <span>{post.reactions.heart}</span>
+                          </button>
+                        )}
+                        {post.reactions.clap > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              fetchReactors(post.id, 'clap')
+                            }}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('clap')}
+                            <span>{post.reactions.clap}</span>
+                          </button>
+                        )}
+                        {post.reactions.smile > 0 && (
+                          <button
+                            type="button"
+                            className="flex items-center space-x-1 focus:outline-none bg-transparent border-0 p-0 m-0 cursor-pointer"
+                            onClick={(e) => {
+                              e.preventDefault()
+                              e.stopPropagation()
+                              fetchReactors(post.id, 'smile')
+                            }}
+                            title="See who reacted"
+                          >
+                            {getReactionIcon('smile')}
+                            <span>{post.reactions.smile}</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </CardContent>
+                </Link>
+                <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        variant="ghost" 
+                        className="h-8 w-8 p-0"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                        }}
+                      >
+                        <MoreHorizontal className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        openEditDialog(post)
+                      }}>
+                        <Edit className="mr-2 h-4 w-4" />
+                        Edit Post
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        className="text-red-600"
+                        onClick={(e) => {
+                          e.preventDefault()
+                          e.stopPropagation()
+                          handleDeletePost(post.id)
+                        }}
+                      >
+                        <Trash2 className="mr-2 h-4 w-4" />
+                        Delete Post
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
               </Card>
             ))}
           </div>
