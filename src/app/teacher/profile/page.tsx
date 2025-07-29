@@ -461,7 +461,9 @@ export default function TeacherProfilePage() {
                         placeholder="Tell us about yourself..."
                       />
                     ) : (
-                      <p className="text-gray-600 mt-1">{teacher.bio || 'No bio provided'}</p>
+                      <div className="text-gray-600 mt-1 whitespace-pre-wrap">
+                        {teacher.bio || 'No bio provided'}
+                      </div>
                     )}
                   </div>
                   
