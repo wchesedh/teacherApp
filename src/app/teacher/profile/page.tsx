@@ -36,7 +36,7 @@ interface Teacher {
   created_at?: string
   avatar_url?: string
   bio?: string
-  line_id?: string
+  phone?: string
   subjects?: string[]
 }
 
@@ -59,7 +59,7 @@ export default function TeacherProfilePage() {
     suffix: '',
     email: '',
     bio: '',
-    line_id: '',
+    phone: '',
     subjects: [] as string[]
   })
 
@@ -96,7 +96,7 @@ export default function TeacherProfilePage() {
         suffix: teacherData.suffix || '',
         email: teacherData.email || '',
         bio: teacherData.bio || '',
-        line_id: teacherData.line_id || '',
+        phone: teacherData.phone || '',
         subjects: teacherData.subjects || []
       })
 
@@ -244,7 +244,7 @@ export default function TeacherProfilePage() {
           suffix: editForm.suffix,
           email: editForm.email,
           bio: editForm.bio,
-          line_id: editForm.line_id,
+          phone: editForm.phone,
           subjects: editForm.subjects
         })
         .eq('id', user.id)
@@ -435,17 +435,17 @@ export default function TeacherProfilePage() {
                   </div>
                   
                   <div>
-                    <Label htmlFor="line_id">Line ID</Label>
+                    <Label htmlFor="phone">Line ID</Label>
                     {editMode ? (
                       <Input
-                        id="line_id"
-                        value={editForm.line_id}
-                        onChange={(e) => setEditForm(prev => ({ ...prev, line_id: e.target.value }))}
+                        id="phone"
+                        value={editForm.phone}
+                        onChange={(e) => setEditForm(prev => ({ ...prev, phone: e.target.value }))}
                         className="mt-1"
                         placeholder="Enter Line ID"
                       />
                     ) : (
-                      <p className="text-gray-600 mt-1">{teacher.line_id || 'Not provided'}</p>
+                      <p className="text-gray-600 mt-1">{teacher.phone || 'Not provided'}</p>
                     )}
                   </div>
 
