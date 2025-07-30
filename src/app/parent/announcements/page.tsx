@@ -79,6 +79,12 @@ interface Class {
   teacher?: Teacher
 }
 
+interface Student {
+  id: string
+  name: string
+  class_id: string
+}
+
 export default function ParentAnnouncementsPage() {
   const { user } = useAuth()
   const [announcements, setAnnouncements] = useState<ClassAnnouncement[]>([])
@@ -133,7 +139,7 @@ export default function ParentAnnouncementsPage() {
         return
       }
 
-      const students = studentParentsData?.map(sp => sp.students).filter(Boolean) || []
+      const students = (studentParentsData?.map(sp => sp.students).flat().filter(Boolean) || []) as Student[]
       
       if (students.length === 0) {
         setAnnouncements([])
@@ -142,7 +148,7 @@ export default function ParentAnnouncementsPage() {
 
       // Get all class IDs from all students
       const allClassIds = students.flatMap(s => 
-        s.classes ? s.classes.map(c => c.id) : (s.class_id ? [s.class_id] : [])
+        s.class_id ? [s.class_id] : []
       )
       const classIds = [...new Set(allClassIds)]
 

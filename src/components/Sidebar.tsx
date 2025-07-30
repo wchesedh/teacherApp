@@ -205,12 +205,8 @@ export default function Sidebar({ className, isCollapsed = false }: SidebarProps
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
         <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-full flex items-center justify-center overflow-hidden" style={{ backgroundColor: '#fdede6' }}>
-            <img 
-              src="/images/trackwise.png" 
-              alt="TrackWise" 
-              className="w-full h-full object-contain"
-            />
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-600 shadow-lg">
+            <span className="text-white font-bold text-sm tracking-wider">TW</span>
           </div>
           {!isCollapsed && (
             <div>
