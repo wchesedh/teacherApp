@@ -24,6 +24,33 @@ import Layout from '../Layout'
 import { toast } from 'sonner'
 import Link from 'next/link'
 
+// Helper function to format date and time
+const formatDateTime = (dateString: string) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric' 
+  }
+  const dateStr = date.toLocaleDateString('en-US', options)
+  
+  if (diffInHours < 24 && date.toDateString() === now.toDateString()) {
+    return `Today at ${timeStr} (${dateStr})`
+  }
+  
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeStr} (${dateStr})`
+  }
+  
+  // For posts older than yesterday, show the full date
+  return `${dateStr} at ${timeStr}`
+}
+
 interface Student {
   id: string
   name: string
@@ -55,6 +82,10 @@ interface Post {
   student?: Student
   class?: Class
   image_url?: string
+  file_url?: string
+  file_name?: string
+  file_urls?: string[]
+  file_names?: string[]
   reactions?: {
     thumbs_up: number
     heart: number
@@ -73,6 +104,8 @@ interface ClassAnnouncement {
   image_url?: string
   file_url?: string
   file_name?: string
+  file_urls?: string[]
+  file_names?: string[]
   reactions?: {
     thumbs_up: number
     heart: number
@@ -276,7 +309,11 @@ export default function ParentDashboard() {
                 id,
                 name
               ),
-              image_url
+              image_url,
+              file_url,
+              file_name,
+              file_urls,
+              file_names
             ),
             students (
               id,
@@ -296,7 +333,11 @@ export default function ParentDashboard() {
             teacher: item.posts.teachers,
             student: item.students,
             class: item.posts.classes,
-            image_url: item.posts.image_url
+            image_url: item.posts.image_url,
+            file_url: item.posts.file_url,
+            file_name: item.posts.file_name,
+            file_urls: item.posts.file_urls,
+            file_names: item.posts.file_names
           })) || []
         }
       }
@@ -359,7 +400,9 @@ export default function ParentDashboard() {
             ),
             image_url,
             file_url,
-            file_name
+            file_name,
+            file_urls,
+            file_names
           `)
           .in('class_id', classIds)
           .not('class_id', 'is', null)
@@ -420,6 +463,8 @@ export default function ParentDashboard() {
                   image_url: item.image_url,
                   file_url: item.file_url,
                   file_name: item.file_name,
+                  file_urls: item.file_urls,
+                  file_names: item.file_names,
                   reactions,
                   userReactions: userReactionTypes
                 }
@@ -478,6 +523,8 @@ export default function ParentDashboard() {
                   image_url: item.image_url,
                   file_url: item.file_url,
                   file_name: item.file_name,
+                  file_urls: item.file_urls,
+                  file_names: item.file_names,
                   reactions,
                   userReactions: userReactionTypes
                 }
@@ -743,11 +790,29 @@ export default function ParentDashboard() {
                         )}
                       </div>
                       <span className="text-sm text-gray-500">
-                        {new Date(announcement.created_at).toLocaleDateString()}
+                        {formatDateTime(announcement.created_at)}
                       </span>
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
-                    {announcement.file_url && (
+                    
+                    {/* Display multiple images if present */}
+                    {announcement.file_urls && announcement.file_urls.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {announcement.file_urls.map((url, index) => (
+                          <div key={index} className="relative">
+                            <img 
+                              src={url} 
+                              alt={`Announcement image ${index + 1}`} 
+                              className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(url, '_blank')}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* Fallback for old single file format */}
+                    {announcement.file_url && !announcement.file_urls && (
                       announcement.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
                         <div className="mt-3">
                           <img 
@@ -969,11 +1034,29 @@ export default function ParentDashboard() {
                           )}
                         </div>
                         <span className="text-sm text-gray-500">
-                          {new Date(post.created_at).toLocaleDateString()}
+                          {formatDateTime(post.created_at)}
                         </span>
                       </div>
                       <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{post.content}</p>
-                      {post.image_url && (
+                      
+                      {/* Display multiple images if present */}
+                      {post.file_urls && post.file_urls.length > 0 && (
+                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                          {post.file_urls.map((url, index) => (
+                            <div key={index} className="relative">
+                              <img 
+                                src={url} 
+                                alt={`Post image ${index + 1}`} 
+                                className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(url, '_blank')}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Fallback for old single file format */}
+                      {post.image_url && !post.file_urls && (
                         <div className="mt-3">
                           <img 
                             src={post.image_url} 

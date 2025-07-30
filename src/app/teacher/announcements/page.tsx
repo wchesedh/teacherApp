@@ -14,6 +14,33 @@ import { supabase } from '@/lib/supabase'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
 
+// Helper function to format date and time
+const formatDateTime = (dateString: string) => {
+  const date = new Date(dateString)
+  const now = new Date()
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60)
+  const timeStr = date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'long', 
+    day: 'numeric', 
+    year: 'numeric' 
+  }
+  const dateStr = date.toLocaleDateString('en-US', options)
+  
+  if (diffInHours < 24 && date.toDateString() === now.toDateString()) {
+    return `Today at ${timeStr} (${dateStr})`
+  }
+  
+  const yesterday = new Date(now)
+  yesterday.setDate(yesterday.getDate() - 1)
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeStr} (${dateStr})`
+  }
+  
+  // For posts older than yesterday, show the full date
+  return `${dateStr} at ${timeStr}`
+}
+
 interface ClassAnnouncement {
   id: string
   content: string
@@ -582,15 +609,7 @@ export default function TeacherAnnouncementsPage() {
                           </Badge>
                         )}
                         <span className="text-sm text-gray-500">
-                          {new Date(announcement.created_at).toLocaleDateString('en-US', { 
-                            weekday: 'long', 
-                            year: 'numeric', 
-                            month: 'long', 
-                            day: 'numeric',
-                            hour: 'numeric',
-                            minute: '2-digit',
-                            hour12: true
-                          })}
+                          {formatDateTime(announcement.created_at)}
                         </span>
                       </div>
                       <DropdownMenu>

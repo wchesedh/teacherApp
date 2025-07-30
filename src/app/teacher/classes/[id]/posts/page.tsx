@@ -76,16 +76,16 @@ const formatDateTime = (dateString: string) => {
     hour12: true 
   });
   
-  // If it's today, show "Today at time"
+  // If it's today, show "Today at time (actual date)"
   if (diffInHours < 24 && date.toDateString() === now.toDateString()) {
-    return `Today at ${timeStr}`;
+    return `Today at ${timeStr} (${dateStr})`;
   }
   
-  // If it's yesterday, show "Yesterday at time"
+  // If it's yesterday, show "Yesterday at time (actual date)"
   const yesterday = new Date(now);
   yesterday.setDate(yesterday.getDate() - 1);
   if (date.toDateString() === yesterday.toDateString()) {
-    return `Yesterday at ${timeStr}`;
+    return `Yesterday at ${timeStr} (${dateStr})`;
   }
   
   // Otherwise show full date and time

@@ -10,13 +10,49 @@ import {
   Clock,
   AlertCircle,
   Info,
-  Power
+  Power,
+  MoreHorizontal,
+  Edit,
+  Trash2
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
 import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import Layout from '@/components/Layout'
 import { toast } from 'sonner'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import {
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormLabel,
+  FormMessage,
+} from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import * as z from 'zod'
 
 interface AcademicPeriod {
   id: string
@@ -30,6 +66,16 @@ interface AcademicPeriod {
   updated_at?: string
 }
 
+const editPeriodSchema = z.object({
+  name: z.string().min(1, 'Name is required'),
+  type: z.enum(['semester', 'quarter', 'trimester', 'term']),
+  start_date: z.string().min(1, 'Start date is required'),
+  end_date: z.string().min(1, 'End date is required'),
+  school_year: z.string().min(1, 'School year is required'),
+})
+
+type EditPeriodForm = z.infer<typeof editPeriodSchema>
+
 export default function AcademicPeriodsPage() {
   const { user } = useAuth()
   const { setActivePeriod: setGlobalActivePeriod, refreshActivePeriod } = useActivePeriod()
@@ -37,6 +83,20 @@ export default function AcademicPeriodsPage() {
   const [loading, setLoading] = useState(true)
   const [activePeriod, setActivePeriod] = useState<AcademicPeriod | null>(null)
   const [changingActive, setChangingActive] = useState<string | null>(null)
+  const [editingPeriod, setEditingPeriod] = useState<AcademicPeriod | null>(null)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [deletingPeriod, setDeletingPeriod] = useState<string | null>(null)
+
+  const editForm = useForm<EditPeriodForm>({
+    resolver: zodResolver(editPeriodSchema),
+    defaultValues: {
+      name: '',
+      type: 'semester',
+      start_date: '',
+      end_date: '',
+      school_year: '',
+    },
+  })
 
   useEffect(() => {
     if (user) {
@@ -127,6 +187,95 @@ export default function AcademicPeriodsPage() {
       toast.error('Error changing active period')
     } finally {
       setChangingActive(null)
+    }
+  }
+
+  const openEditDialog = (period: AcademicPeriod) => {
+    setEditingPeriod(period)
+    editForm.reset({
+      name: period.name,
+      type: period.type,
+      start_date: period.start_date.split('T')[0], // Convert to YYYY-MM-DD format
+      end_date: period.end_date.split('T')[0],
+      school_year: period.school_year,
+    })
+    setIsEditDialogOpen(true)
+  }
+
+  const handleEditSubmit = async (data: EditPeriodForm) => {
+    if (!editingPeriod) return
+
+    try {
+      const { error } = await supabase
+        .from('academic_periods')
+        .update({
+          name: data.name,
+          type: data.type,
+          start_date: data.start_date,
+          end_date: data.end_date,
+          school_year: data.school_year,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', editingPeriod.id)
+
+      if (error) {
+        console.error('Error updating period:', error)
+        toast.error('Error updating academic period')
+        return
+      }
+
+      toast.success('Academic period updated successfully!')
+      setIsEditDialogOpen(false)
+      setEditingPeriod(null)
+      await fetchPeriods()
+      
+      // Refresh the global active period context if the edited period was active
+      if (editingPeriod.is_active) {
+        await refreshActivePeriod()
+      }
+      
+    } catch (error) {
+      console.error('Error updating period:', error)
+      toast.error('Error updating academic period')
+    }
+  }
+
+  const handleDelete = async (periodId: string) => {
+    const periodToDelete = periods.find(p => p.id === periodId)
+    if (!periodToDelete) return
+
+    // Confirm deletion
+    if (!confirm(`Are you sure you want to delete "${periodToDelete.name}"? This action cannot be undone.`)) {
+      return
+    }
+
+    try {
+      setDeletingPeriod(periodId)
+      
+      const { error } = await supabase
+        .from('academic_periods')
+        .delete()
+        .eq('id', periodId)
+
+      if (error) {
+        console.error('Error deleting period:', error)
+        toast.error('Error deleting academic period')
+        return
+      }
+
+      toast.success('Academic period deleted successfully!')
+      await fetchPeriods()
+      
+      // Refresh the global active period context if the deleted period was active
+      if (periodToDelete.is_active) {
+        await refreshActivePeriod()
+      }
+      
+    } catch (error) {
+      console.error('Error deleting period:', error)
+      toast.error('Error deleting academic period')
+    } finally {
+      setDeletingPeriod(null)
     }
   }
 
@@ -253,9 +402,9 @@ export default function AcademicPeriodsPage() {
         <Card>
           <CardHeader>
             <CardTitle>All Academic Periods</CardTitle>
-                         <CardDescription>
-               View all academic periods in the system. Click "Set Active" to change the active period.
-             </CardDescription>
+            <CardDescription>
+              View all academic periods in the system. Click "Set Active" to change the active period.
+            </CardDescription>
           </CardHeader>
           <CardContent>
             {periods.length === 0 ? (
@@ -273,57 +422,88 @@ export default function AcademicPeriodsPage() {
                   const StatusIcon = status.icon
                   
                   return (
-                                         <div key={period.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
-                       <div className="flex items-center justify-between">
-                         <div className="flex-1">
-                           <div className="flex items-center space-x-3">
-                             <h3 className="text-lg font-semibold text-gray-900">{period.name}</h3>
-                             <Badge variant="secondary" className={status.color}>
-                               <StatusIcon className="w-3 h-3 mr-1" />
-                               {status.status}
-                             </Badge>
-                           </div>
-                           <p className="text-sm text-gray-600 mt-1">
-                             {new Date(period.start_date).toLocaleDateString()} - {new Date(period.end_date).toLocaleDateString()}
-                           </p>
-                           <div className="flex items-center space-x-2 mt-2">
-                             <Badge variant="secondary" className={getPeriodTypeColor(period.type)}>
-                               {getPeriodTypeIcon(period.type)}
-                               <span className="ml-1 capitalize">{period.type}</span>
-                             </Badge>
-                             <Badge variant="outline" className="text-xs">
-                               {period.school_year}
-                             </Badge>
-                           </div>
-                         </div>
-                         <div className="flex items-center space-x-4">
-                           <div className="text-right">
-                             <p className="text-sm text-gray-500">Duration</p>
-                             <p className="text-sm font-medium text-gray-900">
-                               {Math.ceil((new Date(period.end_date).getTime() - new Date(period.start_date).getTime()) / (1000 * 60 * 60 * 24))} days
-                             </p>
-                           </div>
-                           {!period.is_active && (
-                             <Button
-                               size="sm"
-                               variant="outline"
-                               onClick={() => changeActivePeriod(period.id)}
-                               disabled={changingActive === period.id}
-                               className="border-green-200 text-green-700 hover:bg-green-50"
-                             >
-                               {changingActive === period.id ? (
-                                 <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
-                               ) : (
-                                 <>
-                                   <Power className="w-4 h-4 mr-1" />
-                                   Set Active
-                                 </>
-                               )}
-                             </Button>
-                           )}
-                         </div>
-                       </div>
-                     </div>
+                    <div key={period.id} className="border rounded-lg p-4 hover:shadow-md transition-shadow">
+                      <div className="flex items-center justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-3">
+                            <h3 className="text-lg font-semibold text-gray-900">{period.name}</h3>
+                            <Badge variant="secondary" className={status.color}>
+                              <StatusIcon className="w-3 h-3 mr-1" />
+                              {status.status}
+                            </Badge>
+                          </div>
+                          <p className="text-sm text-gray-600 mt-1">
+                            {new Date(period.start_date).toLocaleDateString()} - {new Date(period.end_date).toLocaleDateString()}
+                          </p>
+                          <div className="flex items-center space-x-2 mt-2">
+                            <Badge variant="secondary" className={getPeriodTypeColor(period.type)}>
+                              {getPeriodTypeIcon(period.type)}
+                              <span className="ml-1 capitalize">{period.type}</span>
+                            </Badge>
+                            <Badge variant="outline" className="text-xs">
+                              {period.school_year}
+                            </Badge>
+                          </div>
+                        </div>
+                        <div className="flex items-center space-x-4">
+                          <div className="text-right">
+                            <p className="text-sm text-gray-500">Duration</p>
+                            <p className="text-sm font-medium text-gray-900">
+                              {Math.ceil((new Date(period.end_date).getTime() - new Date(period.start_date).getTime()) / (1000 * 60 * 60 * 24))} days
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            {!period.is_active && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => changeActivePeriod(period.id)}
+                                disabled={changingActive === period.id}
+                                className="border-green-200 text-green-700 hover:bg-green-50"
+                              >
+                                {changingActive === period.id ? (
+                                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-green-600"></div>
+                                ) : (
+                                  <>
+                                    <Power className="w-4 h-4 mr-1" />
+                                    Set Active
+                                  </>
+                                )}
+                              </Button>
+                            )}
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-8 w-8 p-0"
+                                >
+                                  <MoreHorizontal className="h-4 w-4" />
+                                  <span className="sr-only">Open menu</span>
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                  onClick={() => openEditDialog(period)}
+                                  className="cursor-pointer"
+                                >
+                                  <Edit className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                                <DropdownMenuItem
+                                  onClick={() => handleDelete(period.id)}
+                                  className="cursor-pointer text-red-600 focus:text-red-600"
+                                  disabled={deletingPeriod === period.id}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4" />
+                                  {deletingPeriod === period.id ? 'Deleting...' : 'Delete'}
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
                   )
                 })}
               </div>
@@ -353,12 +533,115 @@ export default function AcademicPeriodsPage() {
               <p>
                 <strong>Past Period:</strong> A period that has already ended.
               </p>
-                             <p className="mt-4 text-xs">
-                 <strong>Note:</strong> You can change the active period by clicking the "Set Active" button on any period card. Only one period can be active at a time.
-               </p>
+              <p className="mt-4 text-xs">
+                <strong>Note:</strong> You can change the active period by clicking the "Set Active" button on any period card. Only one period can be active at a time.
+              </p>
             </div>
           </CardContent>
         </Card>
+
+        {/* Edit Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Edit Academic Period</DialogTitle>
+              <DialogDescription>
+                Make changes to the academic period details here. Click save when you're done.
+              </DialogDescription>
+            </DialogHeader>
+            <Form {...editForm}>
+              <form onSubmit={editForm.handleSubmit(handleEditSubmit)} className="space-y-4">
+                <FormField
+                  control={editForm.control}
+                  name="name"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Name</FormLabel>
+                      <FormControl>
+                        <Input placeholder="Enter period name" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={editForm.control}
+                  name="type"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Type</FormLabel>
+                      <Select onValueChange={field.onChange} defaultValue={field.value}>
+                        <FormControl>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select period type" />
+                          </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                          <SelectItem value="semester">Semester</SelectItem>
+                          <SelectItem value="quarter">Quarter</SelectItem>
+                          <SelectItem value="trimester">Trimester</SelectItem>
+                          <SelectItem value="term">Term</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <FormField
+                    control={editForm.control}
+                    name="start_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>Start Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                  <FormField
+                    control={editForm.control}
+                    name="end_date"
+                    render={({ field }) => (
+                      <FormItem>
+                        <FormLabel>End Date</FormLabel>
+                        <FormControl>
+                          <Input type="date" {...field} />
+                        </FormControl>
+                        <FormMessage />
+                      </FormItem>
+                    )}
+                  />
+                </div>
+                <FormField
+                  control={editForm.control}
+                  name="school_year"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>School Year</FormLabel>
+                      <FormControl>
+                        <Input placeholder="e.g., 2023-2024" {...field} />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <DialogFooter>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setIsEditDialogOpen(false)}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit">Save Changes</Button>
+                </DialogFooter>
+              </form>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
     </Layout>
   )
