@@ -5,9 +5,10 @@ import { useActivePeriod } from '@/contexts/ActivePeriodContext'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
+import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
-import { MessageSquare, ThumbsUp, Heart, Star, Smile, Users, MoreVertical, Edit, Trash2 } from 'lucide-react'
+import { MessageSquare, ThumbsUp, Heart, Star, Smile, Users, MoreVertical, Edit, Trash2, Plus, Camera } from 'lucide-react'
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import Layout from '@/components/Layout'
@@ -22,6 +23,8 @@ interface ClassAnnouncement {
   image_url?: string
   file_url?: string
   file_name?: string
+  file_urls?: string[]
+  file_names?: string[]
   reactions?: {
     thumbs_up: number
     heart: number
@@ -67,6 +70,12 @@ export default function TeacherAnnouncementsPage() {
   const [editContent, setEditContent] = useState('')
   const [editLoading, setEditLoading] = useState(false)
   const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
+  
+  // Advanced edit state for multiple images
+  const [editFiles, setEditFiles] = useState<File[]>([])
+  const [editFilePreviews, setEditFilePreviews] = useState<string[]>([])
+  const [keepExistingFiles, setKeepExistingFiles] = useState(true)
+  const [removedExistingIndices, setRemovedExistingIndices] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     if (user && activePeriod) {
@@ -108,6 +117,8 @@ export default function TeacherAnnouncementsPage() {
           image_url,
           file_url,
           file_name,
+          file_urls,
+          file_names,
           teachers (
             id,
             name,
@@ -181,6 +192,8 @@ export default function TeacherAnnouncementsPage() {
               image_url: item.image_url,
               file_url: item.file_url,
               file_name: item.file_name,
+              file_urls: item.file_urls,
+              file_names: item.file_names,
               reactions,
               userReactions: []
             }
@@ -242,6 +255,8 @@ export default function TeacherAnnouncementsPage() {
             image_url: item.image_url,
             file_url: item.file_url,
             file_name: item.file_name,
+            file_urls: item.file_urls,
+            file_names: item.file_names,
             reactions,
             userReactions: []  // Teachers don't react to their own posts
           }
@@ -293,6 +308,10 @@ export default function TeacherAnnouncementsPage() {
   const handleEdit = (announcement: ClassAnnouncement) => {
     setEditingAnnouncement(announcement)
     setEditContent(announcement.content)
+    setEditFiles([])
+    setEditFilePreviews([])
+    setKeepExistingFiles(true)
+    setRemovedExistingIndices(new Set())
     setShowEditDialog(true)
   }
 
@@ -337,6 +356,80 @@ export default function TeacherAnnouncementsPage() {
     }
   }
 
+  // Helper functions for file handling
+  const handleEditFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const validFiles = selectedFiles.filter(file => {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 2MB. Please choose a smaller file.`);
+        return false;
+      }
+      return true;
+    });
+
+    // Calculate total count: existing files (if keeping them, excluding removed ones) + current new files + new files being added
+    const existingCount = keepExistingFiles && editingAnnouncement?.file_urls ? 
+      (editingAnnouncement.file_urls.filter((_, index) => !removedExistingIndices.has(index)).length || 0) : 0;
+    const currentNewCount = editFiles.length;
+    const totalCount = existingCount + currentNewCount + validFiles.length;
+    
+    if (totalCount > 5) {
+      toast.error("You can only upload up to 5 images total. Please remove some files first.");
+      return;
+    }
+
+    setEditFiles(prev => [...prev, ...validFiles]);
+    
+    // Generate previews for new images
+    validFiles.forEach(file => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setEditFilePreviews(prev => [...prev, ev.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setEditFilePreviews(prev => [...prev, '']);
+      }
+    });
+  };
+
+  const removeEditFile = (index: number) => {
+    setEditFiles(prev => prev.filter((_, i) => i !== index));
+    setEditFilePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const removeExistingFile = (index: number) => {
+    setRemovedExistingIndices(prev => new Set([...prev, index]));
+  };
+
+  const restoreExistingFile = (index: number) => {
+    setRemovedExistingIndices(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(index);
+      return newSet;
+    });
+  };
+
+  // Upload file to Supabase Storage
+  const uploadFile = async (file: File): Promise<{ url: string, name: string } | null> => {
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const filePath = fileName;
+      const { error } = await supabase.storage.from('class-announcements').upload(filePath, file);
+      if (error) {
+        toast.error('Error uploading file: ' + (error.message || JSON.stringify(error)));
+        return null;
+      }
+      const { data } = supabase.storage.from('class-announcements').getPublicUrl(filePath);
+      return { url: data.publicUrl, name: file.name };
+    } catch (err: any) {
+      toast.error('Error uploading file: ' + (err.message || JSON.stringify(err)));
+      return null;
+    }
+  };
+
   const handleSaveEdit = async () => {
     if (!editingAnnouncement || !editContent.trim()) {
       toast.error('Please enter announcement content')
@@ -345,9 +438,38 @@ export default function TeacherAnnouncementsPage() {
 
     setEditLoading(true)
     try {
+      let file_urls: string[] = [];
+      let file_names: string[] = [];
+      
+      // Start with existing files if we're keeping them (excluding removed ones)
+      if (keepExistingFiles && editingAnnouncement.file_urls && editingAnnouncement.file_urls.length > 0) {
+        file_urls = editingAnnouncement.file_urls.filter((_, index) => !removedExistingIndices.has(index));
+        file_names = (editingAnnouncement.file_names || []).filter((_, index) => !removedExistingIndices.has(index));
+      }
+      
+      // Upload new files and add them to the existing ones
+      if (editFiles.length > 0) {
+        const uploadPromises = editFiles.map(file => uploadFile(file));
+        const uploadResults = await Promise.all(uploadPromises);
+        
+        const failedUploads = uploadResults.filter(result => result === null);
+        if (failedUploads.length > 0) {
+          setEditLoading(false);
+          return;
+        }
+        
+        // Add new files to existing ones (don't overwrite)
+        file_urls = [...file_urls, ...uploadResults.map(result => result!.url)];
+        file_names = [...file_names, ...uploadResults.map(result => result!.name)];
+      }
+
       const { error } = await supabase
         .from('posts')
-        .update({ content: editContent.trim() })
+        .update({ 
+          content: editContent.trim(),
+          file_urls: file_urls.length > 0 ? file_urls : null,
+          file_names: file_names.length > 0 ? file_names : null
+        })
         .eq('id', editingAnnouncement.id)
 
       if (error) {
@@ -360,6 +482,10 @@ export default function TeacherAnnouncementsPage() {
       setShowEditDialog(false)
       setEditingAnnouncement(null)
       setEditContent('')
+      setEditFiles([])
+      setEditFilePreviews([])
+      setKeepExistingFiles(true)
+      setRemovedExistingIndices(new Set())
       fetchAnnouncements() // Refresh the list
     } catch (error) {
       console.error('Error updating announcement:', error)
@@ -499,20 +625,24 @@ export default function TeacherAnnouncementsPage() {
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
                     
-                    {/* Display image if present */}
-                    {announcement.image_url && (
-                      <div className="mt-3">
-                        <img 
-                          src={announcement.image_url} 
-                          alt="Announcement attachment" 
-                          className="max-w-full h-auto rounded-lg border" 
-                          style={{ maxHeight: 400 }} 
-                        />
+                    {/* Display multiple images if present */}
+                    {announcement.file_urls && announcement.file_urls.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {announcement.file_urls.map((url, index) => (
+                          <div key={index} className="relative">
+                            <img 
+                              src={url} 
+                              alt={`Announcement image ${index + 1}`} 
+                              className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(url, '_blank')}
+                            />
+                          </div>
+                        ))}
                       </div>
                     )}
                     
-                    {/* Display file attachment if present */}
-                    {announcement.file_url && !announcement.image_url && (
+                    {/* Fallback for old single file format */}
+                    {announcement.file_url && !announcement.file_urls && (
                       announcement.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
                         <div className="mt-3">
                           <img 
@@ -634,17 +764,18 @@ export default function TeacherAnnouncementsPage() {
 
         {/* Edit Announcement Dialog */}
         <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
               <DialogTitle>Edit Announcement</DialogTitle>
               <DialogDescription>
-                Update the content of your announcement
+                Update the content and images of your announcement
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4">
               <div>
-                <label className="text-sm font-medium">Content</label>
+                <Label htmlFor="edit-content">Announcement Content</Label>
                 <textarea
+                  id="edit-content"
                   value={editContent}
                   onChange={(e) => setEditContent(e.target.value)}
                   placeholder="Enter announcement content..."
@@ -652,6 +783,101 @@ export default function TeacherAnnouncementsPage() {
                   className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 />
               </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-file">Attach Images (up to 5, max 2MB each)</Label>
+                <input
+                  id="edit-file"
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  onChange={handleEditFileChange}
+                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                />
+                
+                {editingAnnouncement?.file_urls && editingAnnouncement.file_urls.length > 0 && keepExistingFiles && (
+                  <div className="mt-2 p-2 bg-gray-50 rounded border">
+                    <p className="text-sm text-gray-600 mb-2">Current attachments:</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {editingAnnouncement.file_urls.map((url, index) => {
+                        const isRemoved = removedExistingIndices.has(index);
+                        return (
+                          <div key={index} className={`relative ${isRemoved ? 'opacity-50' : ''}`}>
+                            <img 
+                              src={url} 
+                              alt={`Current attachment ${index + 1}`} 
+                              className={`w-full h-24 object-cover rounded border ${isRemoved ? 'grayscale' : ''}`} 
+                            />
+                            <Button 
+                              type="button" 
+                              variant="ghost" 
+                              size="sm" 
+                              className={`absolute top-1 right-1 h-6 w-6 p-0 ${isRemoved ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} text-white`}
+                              onClick={() => isRemoved ? restoreExistingFile(index) : removeExistingFile(index)}
+                            >
+                              {isRemoved ? '↻' : '×'}
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {removedExistingIndices.size > 0 && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        {removedExistingIndices.size} image(s) marked for removal
+                      </p>
+                    )}
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      className="mt-2" 
+                      onClick={() => setKeepExistingFiles(false)}
+                    >
+                      Remove all current attachments
+                    </Button>
+                  </div>
+                )}
+                
+                {editFiles.length > 0 && (
+                  <div className="mt-2 space-y-2">
+                    <p className="text-sm text-gray-600">
+                      {editFiles.length} new image(s) selected
+                      {keepExistingFiles && editingAnnouncement?.file_urls && editingAnnouncement.file_urls.length > 0 && (
+                        <span className="ml-2 text-blue-600">
+                          (+ {editingAnnouncement.file_urls.filter((_, index) => !removedExistingIndices.has(index)).length} existing)
+                        </span>
+                      )}
+                    </p>
+                    <div className="grid grid-cols-2 gap-2">
+                      {editFiles.map((file, index) => (
+                        <div key={index} className="relative border rounded p-2">
+                          {editFilePreviews[index] ? (
+                            <img 
+                              src={editFilePreviews[index]} 
+                              alt={`Preview ${index + 1}`} 
+                              className="w-full h-32 object-cover rounded" 
+                            />
+                          ) : (
+                            <div className="w-full h-32 bg-gray-100 rounded flex items-center justify-center">
+                              <span className="text-sm text-gray-500">{file.name}</span>
+                            </div>
+                          )}
+                          <Button 
+                            type="button" 
+                            variant="ghost" 
+                            size="sm" 
+                            className="absolute top-1 right-1 h-6 w-6 p-0 bg-red-500 text-white hover:bg-red-600" 
+                            onClick={() => removeEditFile(index)}
+                          >
+                            ×
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+              
               <div className="flex justify-end space-x-2">
                 <Button 
                   variant="outline" 
@@ -659,6 +885,10 @@ export default function TeacherAnnouncementsPage() {
                     setShowEditDialog(false)
                     setEditingAnnouncement(null)
                     setEditContent('')
+                    setEditFiles([])
+                    setEditFilePreviews([])
+                    setKeepExistingFiles(true)
+                    setRemovedExistingIndices(new Set())
                   }}
                 >
                   Cancel

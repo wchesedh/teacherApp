@@ -7,7 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { MessageSquare, Plus, Calendar, User, ArrowLeft } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MessageSquare, Plus, Calendar, User, ArrowLeft, Edit, Trash2, MoreHorizontal } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuth } from "@/contexts/AuthContext";
 import Layout from "@/components/Layout";
@@ -29,6 +30,8 @@ interface Post {
   class_id: string;
   file_url?: string;
   file_name?: string;
+  file_urls?: string[];
+  file_names?: string[];
   teacher?: {
     id: string;
     name: string;
@@ -52,6 +55,43 @@ interface Post {
   };
 }
 
+// Helper function to format date and time
+const formatDateTime = (dateString: string) => {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInHours = (now.getTime() - date.getTime()) / (1000 * 60 * 60);
+  
+  // Format the date
+  const options: Intl.DateTimeFormatOptions = { 
+    month: 'long', 
+    day: 'numeric',
+    year: 'numeric'
+  };
+  const dateStr = date.toLocaleDateString('en-US', options);
+  
+  // Format the time in 12-hour format
+  const timeStr = date.toLocaleTimeString('en-US', { 
+    hour: 'numeric', 
+    minute: '2-digit',
+    hour12: true 
+  });
+  
+  // If it's today, show "Today at time"
+  if (diffInHours < 24 && date.toDateString() === now.toDateString()) {
+    return `Today at ${timeStr}`;
+  }
+  
+  // If it's yesterday, show "Yesterday at time"
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (date.toDateString() === yesterday.toDateString()) {
+    return `Yesterday at ${timeStr}`;
+  }
+  
+  // Otherwise show full date and time
+  return `${dateStr} at ${timeStr}`;
+};
+
 export default function ClassPostsPage() {
   const { user } = useAuth();
   const params = useParams();
@@ -62,6 +102,8 @@ export default function ClassPostsPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const [isEditPostOpen, setIsEditPostOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<Post | null>(null);
   const [showReactorsDialog, setShowReactorsDialog] = useState(false);
   const [reactors, setReactors] = useState<Array<{ id: string; name: string; email: string }>>([]);
   const [reactorsLoading, setReactorsLoading] = useState(false);
@@ -116,6 +158,8 @@ export default function ClassPostsPage() {
           class_id,
           file_url,
           file_name,
+          file_urls,
+          file_names,
           teachers (
             id,
             name,
@@ -180,7 +224,7 @@ export default function ClassPostsPage() {
     }
   };
 
-  const handleCreatePost = async (postData: { content: string, file_url?: string, file_name?: string }) => {
+  const handleCreatePost = async (postData: { content: string, file_urls?: string[], file_names?: string[] }) => {
     if (!user || !classId) return;
     try {
       const { data: createdPost, error: postError } = await supabase
@@ -190,8 +234,8 @@ export default function ClassPostsPage() {
             content: postData.content,
             teacher_id: user.id,
             class_id: classId,
-            file_url: postData.file_url || null,
-            file_name: postData.file_name || null,
+            file_urls: postData.file_urls || null,
+            file_names: postData.file_names || null,
           },
         ])
         .select();
@@ -211,6 +255,68 @@ export default function ClassPostsPage() {
       console.error("Error creating post:", error);
       toast.error("Error creating post");
     }
+  };
+
+  const handleEditPost = async (postData: { content: string, file_urls?: string[], file_names?: string[] }) => {
+    if (!user || !editingPost) return;
+    try {
+      const { error: postError } = await supabase
+        .from("posts")
+        .update({
+          content: postData.content,
+          file_urls: postData.file_urls || null,
+          file_names: postData.file_names || null,
+        })
+        .eq("id", editingPost.id)
+        .eq("teacher_id", user.id); // Ensure only the author can edit
+
+      if (postError) {
+        console.error("Error updating post:", postError);
+        toast.error("Error updating post: " + postError.message);
+        return;
+      }
+
+      setIsEditPostOpen(false);
+      setEditingPost(null);
+      await fetchPosts();
+      toast.success("Announcement updated successfully!");
+    } catch (error) {
+      console.error("Error updating post:", error);
+      toast.error("Error updating post");
+    }
+  };
+
+  const handleDeletePost = async (postId: string) => {
+    if (!user) return;
+    
+    if (!confirm("Are you sure you want to delete this announcement? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from("posts")
+        .delete()
+        .eq("id", postId)
+        .eq("teacher_id", user.id); // Ensure only the author can delete
+
+      if (error) {
+        console.error("Error deleting post:", error);
+        toast.error("Error deleting post: " + error.message);
+        return;
+      }
+
+      await fetchPosts();
+      toast.success("Announcement deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting post:", error);
+      toast.error("Error deleting post");
+    }
+  };
+
+  const openEditDialog = (post: Post) => {
+    setEditingPost(post);
+    setIsEditPostOpen(true);
   };
 
   // Fetch reactors for a post and reaction type
@@ -324,6 +430,28 @@ export default function ClassPostsPage() {
               <CreatePostForm onSubmit={handleCreatePost} />
             </DialogContent>
           </Dialog>
+
+          {/* Edit Post Dialog */}
+          <Dialog open={isEditPostOpen} onOpenChange={setIsEditPostOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Edit Class Announcement</DialogTitle>
+                <DialogDescription>
+                  Update the announcement content and attachments.
+                </DialogDescription>
+              </DialogHeader>
+              {editingPost && (
+                <EditPostForm 
+                  post={editingPost} 
+                  onSubmit={handleEditPost} 
+                  onCancel={() => {
+                    setIsEditPostOpen(false);
+                    setEditingPost(null);
+                  }}
+                />
+              )}
+            </DialogContent>
+          </Dialog>
         </div>
         {/* Posts */}
         <Card>
@@ -365,15 +493,58 @@ export default function ClassPostsPage() {
                           </Badge>
                         )}
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Calendar className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm text-gray-500">
-                          {new Date(post.created_at).toLocaleDateString()}
-                        </span>
+                      <div className="flex items-center space-x-4">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-gray-500" />
+                          <span className="text-sm text-gray-500">
+                            {formatDateTime(post.created_at)}
+                          </span>
+                        </div>
+                        {post.teacher_id === user?.id && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-6 w-6 p-0 text-gray-500 hover:text-gray-700"
+                              >
+                                <MoreHorizontal className="w-3 h-3" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem onClick={() => openEditDialog(post)}>
+                                <Edit className="w-3 h-3 mr-2" />
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuItem 
+                                onClick={() => handleDeletePost(post.id)}
+                                className="text-red-600 focus:text-red-600"
+                              >
+                                <Trash2 className="w-3 h-3 mr-2" />
+                                Delete
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     </div>
                     <p className="text-gray-600 whitespace-pre-wrap">{post.content}</p>
-                    {post.file_url && (
+                    {post.file_urls && post.file_urls.length > 0 && (
+                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {post.file_urls.map((url, index) => (
+                          <div key={index} className="relative">
+                            <img 
+                              src={url} 
+                              alt={`Announcement image ${index + 1}`} 
+                              className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                              onClick={() => window.open(url, '_blank')}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {/* Fallback for old single file format */}
+                    {post.file_url && !post.file_urls && (
                       post.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
                         <div className="mt-3"><img src={post.file_url} alt="Announcement attachment" className="max-w-full h-auto rounded-lg border" style={{ maxHeight: 400 }} /></div>
                       ) : (
@@ -469,29 +640,42 @@ export default function ClassPostsPage() {
 }
 
 // Create Post Form Component
-function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file_url?: string, file_name?: string }) => void }) {
+function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file_urls?: string[], file_names?: string[] }) => void }) {
   const [content, setContent] = useState("");
   const [loading, setLoading] = useState(false);
-  const [file, setFile] = useState<File | null>(null);
-  const [filePreview, setFilePreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<string[]>([]);
 
   // Handle file input change
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = e.target.files?.[0];
-    if (selected) {
-      if (selected.size > 2 * 1024 * 1024) {
-        toast.error("File size must be less than 2MB");
-        return;
+    const selectedFiles = Array.from(e.target.files || []);
+    const validFiles = selectedFiles.filter(file => {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 2MB. Please choose a smaller file.`);
+        return false;
       }
-      setFile(selected);
-      if (selected.type.startsWith("image/")) {
-        const reader = new FileReader();
-        reader.onload = (ev) => setFilePreview(ev.target?.result as string);
-        reader.readAsDataURL(selected);
-      } else {
-        setFilePreview(null);
-      }
+      return true;
+    });
+
+    if (files.length + validFiles.length > 5) {
+      toast.error("You can only upload up to 5 images. Please remove some files first.");
+      return;
     }
+
+    setFiles(prev => [...prev, ...validFiles]);
+    
+    // Generate previews for new images
+    validFiles.forEach(file => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setFilePreviews(prev => [...prev, ev.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setFilePreviews(prev => [...prev, '']);
+      }
+    });
   };
 
   // Handle paste image
@@ -503,13 +687,25 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file
           toast.error("Image size must be less than 2MB");
           return;
         }
-        setFile(pastedFile);
+        if (files.length >= 5) {
+          toast.error("You can only upload up to 5 images. Please remove some files first.");
+          return;
+        }
+        setFiles(prev => [...prev, pastedFile]);
         const reader = new FileReader();
-        reader.onload = (ev) => setFilePreview(ev.target?.result as string);
+        reader.onload = (ev) => {
+          setFilePreviews(prev => [...prev, ev.target?.result as string]);
+        };
         reader.readAsDataURL(pastedFile);
         e.preventDefault();
       }
     }
+  };
+
+  // Remove file at specific index
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setFilePreviews(prev => prev.filter((_, i) => i !== index));
   };
 
   // Upload file to Supabase Storage
@@ -538,20 +734,28 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file
       return;
     }
     setLoading(true);
-    let file_url, file_name;
-    if (file) {
-      const uploaded = await uploadFile(file);
-      if (!uploaded) {
+    
+    let file_urls: string[] = [];
+    let file_names: string[] = [];
+    
+    if (files.length > 0) {
+      const uploadPromises = files.map(file => uploadFile(file));
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      const failedUploads = uploadResults.filter(result => result === null);
+      if (failedUploads.length > 0) {
         setLoading(false);
         return;
       }
-      file_url = uploaded.url;
-      file_name = uploaded.name;
+      
+      file_urls = uploadResults.map(result => result!.url);
+      file_names = uploadResults.map(result => result!.name);
     }
-    await onSubmit({ content, file_url, file_name });
+    
+    await onSubmit({ content, file_urls, file_names });
     setContent("");
-    setFile(null);
-    setFilePreview(null);
+    setFiles([]);
+    setFilePreviews([]);
     setLoading(false);
   };
 
@@ -571,28 +775,335 @@ function CreatePostForm({ onSubmit }: { onSubmit: (data: { content: string, file
         />
       </div>
       <div className="space-y-2">
-        <Label htmlFor="file">Attach File or Image (max 2MB)</Label>
+        <Label htmlFor="file">Attach Images (up to 5, max 2MB each)</Label>
         <input
           id="file"
           type="file"
-          accept="*"
+          accept="image/*"
+          multiple
           onChange={handleFileChange}
           className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
         />
-        {file && (
-          <div className="mt-2">
-            {filePreview ? (
-              <img src={filePreview} alt="Preview" className="max-h-40 rounded border" />
-            ) : (
-              <span className="text-sm text-gray-700">{file.name}</span>
-            )}
-            <Button type="button" variant="ghost" size="sm" className="ml-2" onClick={() => { setFile(null); setFilePreview(null); }}>Remove</Button>
+        {files.length > 0 && (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-gray-600">
+              {files.length}/5 images selected
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {files.map((file, index) => (
+                <div key={index} className="relative border rounded p-2">
+                  {filePreviews[index] ? (
+                    <img 
+                      src={filePreviews[index]} 
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-32 object-cover rounded" 
+                    />
+                  ) : (
+                    <div className="w-full h-32 bg-gray-100 rounded flex items-center justify-center">
+                      <span className="text-sm text-gray-500">{file.name}</span>
+                    </div>
+                  )}
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="absolute top-1 right-1 h-6 w-6 p-0 bg-red-500 text-white hover:bg-red-600" 
+                    onClick={() => removeFile(index)}
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
           </div>
         )}
       </div>
       <div className="flex justify-end space-x-2">
         <Button type="submit" disabled={loading}>
           {loading ? "Creating..." : "Create Announcement"}
+        </Button>
+      </div>
+    </form>
+  );
+}
+
+// Edit Post Form Component
+function EditPostForm({ 
+  post, 
+  onSubmit, 
+  onCancel 
+}: { 
+  post: Post; 
+  onSubmit: (data: { content: string, file_urls?: string[], file_names?: string[] }) => void;
+  onCancel: () => void;
+}) {
+  const [content, setContent] = useState(post.content);
+  const [loading, setLoading] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
+  const [filePreviews, setFilePreviews] = useState<string[]>([]);
+  const [keepExistingFiles, setKeepExistingFiles] = useState(true);
+  const [removedExistingIndices, setRemovedExistingIndices] = useState<Set<number>>(new Set());
+
+  // Handle file input change
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedFiles = Array.from(e.target.files || []);
+    const validFiles = selectedFiles.filter(file => {
+      if (file.size > 2 * 1024 * 1024) {
+        toast.error(`${file.name} is larger than 2MB. Please choose a smaller file.`);
+        return false;
+      }
+      return true;
+    });
+
+    // Calculate total count: existing files (if keeping them, excluding removed ones) + current new files + new files being added
+    const existingCount = keepExistingFiles ? (post.file_urls?.filter((_, index) => !removedExistingIndices.has(index)).length || 0) : 0;
+    const currentNewCount = files.length;
+    const totalCount = existingCount + currentNewCount + validFiles.length;
+    
+    if (totalCount > 5) {
+      toast.error("You can only upload up to 5 images total. Please remove some files first.");
+      return;
+    }
+
+    setFiles(prev => [...prev, ...validFiles]);
+    
+    // Generate previews for new images
+    validFiles.forEach(file => {
+      if (file.type.startsWith("image/")) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setFilePreviews(prev => [...prev, ev.target?.result as string]);
+        };
+        reader.readAsDataURL(file);
+      } else {
+        setFilePreviews(prev => [...prev, '']);
+      }
+    });
+  };
+
+  // Handle paste image
+  const handlePaste = (e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    if (e.clipboardData && e.clipboardData.files && e.clipboardData.files.length > 0) {
+      const pastedFile = e.clipboardData.files[0];
+      if (pastedFile.type.startsWith("image/")) {
+        if (pastedFile.size > 2 * 1024 * 1024) {
+          toast.error("Image size must be less than 2MB");
+          return;
+        }
+        
+        // Calculate total count: existing files (if keeping them, excluding removed ones) + current new files + 1 new file
+        const existingCount = keepExistingFiles ? (post.file_urls?.filter((_, index) => !removedExistingIndices.has(index)).length || 0) : 0;
+        const currentNewCount = files.length;
+        const totalCount = existingCount + currentNewCount + 1;
+        
+        if (totalCount > 5) {
+          toast.error("You can only upload up to 5 images total. Please remove some files first.");
+          return;
+        }
+        
+        setFiles(prev => [...prev, pastedFile]);
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          setFilePreviews(prev => [...prev, ev.target?.result as string]);
+        };
+        reader.readAsDataURL(pastedFile);
+        e.preventDefault();
+      }
+    }
+  };
+
+  // Remove file at specific index
+  const removeFile = (index: number) => {
+    setFiles(prev => prev.filter((_, i) => i !== index));
+    setFilePreviews(prev => prev.filter((_, i) => i !== index));
+  };
+
+  // Remove existing file at specific index
+  const removeExistingFile = (index: number) => {
+    setRemovedExistingIndices(prev => new Set([...prev, index]));
+  };
+
+  // Restore existing file at specific index
+  const restoreExistingFile = (index: number) => {
+    setRemovedExistingIndices(prev => {
+      const newSet = new Set(prev);
+      newSet.delete(index);
+      return newSet;
+    });
+  };
+
+  // Upload file to Supabase Storage
+  const uploadFile = async (file: File): Promise<{ url: string, name: string } | null> => {
+    try {
+      const ext = file.name.split('.').pop();
+      const fileName = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+      const filePath = fileName;
+      const { error } = await supabase.storage.from('class-announcements').upload(filePath, file);
+      if (error) {
+        toast.error('Error uploading file: ' + (error.message || JSON.stringify(error)));
+        return null;
+      }
+      const { data } = supabase.storage.from('class-announcements').getPublicUrl(filePath);
+      return { url: data.publicUrl, name: file.name };
+    } catch (err: any) {
+      toast.error('Error uploading file: ' + (err.message || JSON.stringify(err)));
+      return null;
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!content.trim()) {
+      toast.error("Please enter announcement content");
+      return;
+    }
+    setLoading(true);
+    
+    let file_urls: string[] = [];
+    let file_names: string[] = [];
+    
+    // Start with existing files if we're keeping them (excluding removed ones)
+    if (keepExistingFiles && post.file_urls && post.file_urls.length > 0) {
+      file_urls = post.file_urls.filter((_, index) => !removedExistingIndices.has(index));
+      file_names = (post.file_names || []).filter((_, index) => !removedExistingIndices.has(index));
+    }
+    
+    // Upload new files and add them to the existing ones
+    if (files.length > 0) {
+      const uploadPromises = files.map(file => uploadFile(file));
+      const uploadResults = await Promise.all(uploadPromises);
+      
+      const failedUploads = uploadResults.filter(result => result === null);
+      if (failedUploads.length > 0) {
+        setLoading(false);
+        return;
+      }
+      
+      // Add new files to existing ones (don't overwrite)
+      file_urls = [...file_urls, ...uploadResults.map(result => result!.url)];
+      file_names = [...file_names, ...uploadResults.map(result => result!.name)];
+    }
+    
+    await onSubmit({ content, file_urls, file_names });
+    setLoading(false);
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div className="space-y-2">
+        <Label htmlFor="edit-content">Announcement Content</Label>
+        <textarea
+          id="edit-content"
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
+          onPaste={handlePaste}
+          placeholder="Share important information with all parents in this class..."
+          rows={6}
+          required
+          className="flex min-h-[80px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      </div>
+      
+      <div className="space-y-2">
+        <Label htmlFor="edit-file">Attach Images (up to 5, max 2MB each)</Label>
+        <input
+          id="edit-file"
+          type="file"
+          accept="image/*"
+          multiple
+          onChange={handleFileChange}
+          className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+        />
+        
+        {post.file_urls && post.file_urls.length > 0 && keepExistingFiles && (
+          <div className="mt-2 p-2 bg-gray-50 rounded border">
+            <p className="text-sm text-gray-600 mb-2">Current attachments:</p>
+            <div className="grid grid-cols-2 gap-2">
+              {post.file_urls.map((url, index) => {
+                const isRemoved = removedExistingIndices.has(index);
+                return (
+                  <div key={index} className={`relative ${isRemoved ? 'opacity-50' : ''}`}>
+                    <img 
+                      src={url} 
+                      alt={`Current attachment ${index + 1}`} 
+                      className={`w-full h-24 object-cover rounded border ${isRemoved ? 'grayscale' : ''}`} 
+                    />
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      size="sm" 
+                      className={`absolute top-1 right-1 h-6 w-6 p-0 ${isRemoved ? 'bg-green-500 hover:bg-green-600' : 'bg-red-500 hover:bg-red-600'} text-white`}
+                      onClick={() => isRemoved ? restoreExistingFile(index) : removeExistingFile(index)}
+                    >
+                      {isRemoved ? '↻' : '×'}
+                    </Button>
+                  </div>
+                );
+              })}
+            </div>
+            {removedExistingIndices.size > 0 && (
+              <p className="text-xs text-gray-500 mt-1">
+                {removedExistingIndices.size} image(s) marked for removal
+              </p>
+            )}
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="sm" 
+              className="mt-2" 
+              onClick={() => setKeepExistingFiles(false)}
+            >
+              Remove all current attachments
+            </Button>
+          </div>
+        )}
+        
+        {files.length > 0 && (
+          <div className="mt-2 space-y-2">
+            <p className="text-sm text-gray-600">
+              {files.length} new image(s) selected
+              {keepExistingFiles && post.file_urls && post.file_urls.length > 0 && (
+                <span className="ml-2 text-blue-600">
+                  (+ {post.file_urls.length} existing)
+                </span>
+              )}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {files.map((file, index) => (
+                <div key={index} className="relative border rounded p-2">
+                  {filePreviews[index] ? (
+                    <img 
+                      src={filePreviews[index]} 
+                      alt={`Preview ${index + 1}`} 
+                      className="w-full h-32 object-cover rounded" 
+                    />
+                  ) : (
+                    <div className="w-full h-32 bg-gray-100 rounded flex items-center justify-center">
+                      <span className="text-sm text-gray-500">{file.name}</span>
+                    </div>
+                  )}
+                  <Button 
+                    type="button" 
+                    variant="ghost" 
+                    size="sm" 
+                    className="absolute top-1 right-1 h-6 w-6 p-0 bg-red-500 text-white hover:bg-red-600" 
+                    onClick={() => removeFile(index)}
+                  >
+                    ×
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+      
+      <div className="flex justify-end space-x-2">
+        <Button type="button" variant="outline" onClick={onCancel}>
+          Cancel
+        </Button>
+        <Button type="submit" disabled={loading}>
+          {loading ? "Updating..." : "Update Announcement"}
         </Button>
       </div>
     </form>
