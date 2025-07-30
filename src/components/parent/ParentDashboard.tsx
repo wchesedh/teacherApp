@@ -121,6 +121,8 @@ export default function ParentDashboard() {
   const [posts, setPosts] = useState<Post[]>([])
   const [classAnnouncements, setClassAnnouncements] = useState<ClassAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
+  const [loadingStudentDetails, setLoadingStudentDetails] = useState<Set<string>>(new Set())
   const [stats, setStats] = useState({
     children: 0,
     classes: 0,
@@ -877,9 +879,23 @@ export default function ParentDashboard() {
                 ))}
                 {classAnnouncements.length > 3 && (
                   <div className="text-center pt-4">
-                    <Button variant="outline" size="sm">
-                      View All Announcements
-                    </Button>
+                    <Link href="/parent/announcements">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => setLoadingAnnouncements(true)}
+                        disabled={loadingAnnouncements}
+                      >
+                        {loadingAnnouncements ? (
+                          <>
+                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                            Loading...
+                          </>
+                        ) : (
+                          'View All Announcements'
+                        )}
+                      </Button>
+                    </Link>
                   </div>
                 )}
               </div>
@@ -931,9 +947,25 @@ export default function ParentDashboard() {
                           </div>
                         </div>
                         <Link href={`/parent/children/${student.id}`}>
-                          <Button size="sm" variant="outline">
-                            <Eye className="w-4 h-4 mr-1" />
-                            View Details
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => {
+                              setLoadingStudentDetails(prev => new Set(prev).add(student.id))
+                            }}
+                            disabled={loadingStudentDetails.has(student.id)}
+                          >
+                            {loadingStudentDetails.has(student.id) ? (
+                              <>
+                                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-blue-600 mr-1"></div>
+                                Loading...
+                              </>
+                            ) : (
+                              <>
+                                <Eye className="w-4 h-4 mr-1" />
+                                View Details
+                              </>
+                            )}
                           </Button>
                         </Link>
                       </div>
