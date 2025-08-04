@@ -100,6 +100,11 @@ interface Post {
   content: string
   created_at: string
   teacher?: Teacher
+  image_url?: string
+  file_url?: string
+  file_name?: string
+  file_urls?: string[]
+  file_names?: string[]
   reactions?: {
     thumbs_up: number
     heart: number
@@ -163,6 +168,11 @@ export default function ParentStudentProfilePage() {
             content,
             created_at,
             class_id,
+            image_url,
+            file_url,
+            file_name,
+            file_urls,
+            file_names,
             teachers (
               id,
               first_name,
@@ -222,6 +232,11 @@ export default function ParentStudentProfilePage() {
                 content: item.posts.content,
                 created_at: item.posts.created_at,
                 teacher: item.posts.teachers,
+                image_url: item.posts.image_url,
+                file_url: item.posts.file_url,
+                file_name: item.posts.file_name,
+                file_urls: item.posts.file_urls,
+                file_names: item.posts.file_names,
                 reactions,
                 userReactions: userReactionTypes
               }
@@ -1351,6 +1366,61 @@ export default function ParentStudentProfilePage() {
                           </div>
                         </div>
                         <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{post.content}</p>
+                        
+                        {/* Display images if present */}
+                        {post.file_urls && post.file_urls.length > 0 && (
+                          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 mb-3">
+                            {post.file_urls.map((url, index) => (
+                              <div key={index} className="relative">
+                                <img 
+                                  src={url} 
+                                  alt={`Post image ${index + 1}`} 
+                                  className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                                  onClick={() => window.open(url, '_blank')}
+                                />
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Fallback for old single file format */}
+                        {post.image_url && !post.file_urls && (
+                          <div className="mt-3 mb-3">
+                            <img 
+                              src={post.image_url} 
+                              alt="Post image"
+                              className="max-w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                              style={{ maxHeight: 400 }}
+                              onClick={() => window.open(post.image_url, '_blank')}
+                            />
+                          </div>
+                        )}
+                        
+                        {/* Fallback for file_url format */}
+                        {post.file_url && !post.file_urls && !post.image_url && (
+                          post.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                            <div className="mt-3 mb-3">
+                              <img 
+                                src={post.file_url} 
+                                alt="Post attachment" 
+                                className="max-w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                                style={{ maxHeight: 400 }}
+                                onClick={() => window.open(post.file_url, '_blank')}
+                              />
+                            </div>
+                          ) : (
+                            <div className="mt-3 mb-3">
+                              <a 
+                                href={post.file_url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="text-blue-600 underline hover:text-blue-800"
+                              >
+                                {post.file_name || 'Download attachment'}
+                              </a>
+                            </div>
+                          )
+                        )}
                         
                         {/* Reaction buttons */}
                         <div className="flex items-center space-x-4 text-sm">
