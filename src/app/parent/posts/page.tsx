@@ -18,6 +18,11 @@ interface Post {
   content: string
   created_at: string
   teacher_id: string
+  image_url?: string
+  file_url?: string
+  file_name?: string
+  file_urls?: string[]
+  file_names?: string[]
   teacher?: {
     id: string
     name: string
@@ -98,6 +103,11 @@ export default function ParentPostsPage() {
             created_at,
             teacher_id,
             class_id,
+            image_url,
+            file_url,
+            file_name,
+            file_urls,
+            file_names,
             classes (
               id,
               name,
@@ -131,6 +141,11 @@ export default function ParentPostsPage() {
               content: item.posts.content,
               created_at: item.posts.created_at,
               teacher_id: item.posts.teacher_id,
+              image_url: item.posts.image_url,
+              file_url: item.posts.file_url,
+              file_name: item.posts.file_name,
+              file_urls: item.posts.file_urls,
+              file_names: item.posts.file_names,
               student: {
                 id: item.students.id,
                 name: item.students.name,
@@ -272,9 +287,64 @@ export default function ParentPostsPage() {
                   </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-gray-600 whitespace-pre-wrap leading-relaxed">
+                  <p className="text-gray-600 whitespace-pre-wrap leading-relaxed mb-3">
                     {post.content}
                   </p>
+                  
+                  {/* Display multiple images if present */}
+                  {post.file_urls && post.file_urls.length > 0 && (
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      {post.file_urls.map((url, index) => (
+                        <div key={index} className="relative">
+                          <img 
+                            src={url} 
+                            alt={`Post image ${index + 1}`} 
+                            className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(url, '_blank')}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  
+                  {/* Fallback for old single image format */}
+                  {post.image_url && !post.file_urls && (
+                    <div className="mt-3">
+                      <img 
+                        src={post.image_url} 
+                        alt="Post image"
+                        className="max-w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                        style={{ maxHeight: 400 }}
+                        onClick={() => window.open(post.image_url, '_blank')}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Fallback for file_url format */}
+                  {post.file_url && !post.file_urls && !post.image_url && (
+                    post.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                      <div className="mt-3">
+                        <img 
+                          src={post.file_url} 
+                          alt="Post attachment" 
+                          className="max-w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                          style={{ maxHeight: 400 }}
+                          onClick={() => window.open(post.file_url, '_blank')}
+                        />
+                      </div>
+                    ) : (
+                      <div className="mt-3">
+                        <a 
+                          href={post.file_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer" 
+                          className="text-blue-600 underline hover:text-blue-800"
+                        >
+                          📎 {post.file_name || 'Download attachment'}
+                        </a>
+                      </div>
+                    )
+                  )}
                 </CardContent>
               </Card>
             ))}
