@@ -1,6 +1,6 @@
 'use client'
 
-import { useParams } from 'next/navigation'
+import { useParams, useSearchParams } from 'next/navigation'
 import { useState, useEffect } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -116,6 +116,7 @@ interface Post {
 
 export default function ParentStudentProfilePage() {
   const params = useParams()
+  const searchParams = useSearchParams()
   const { user, loading: authLoading } = useAuth()
   const studentId = params.id as string
   
@@ -402,13 +403,24 @@ export default function ParentStudentProfilePage() {
       }
 
       setStudentClasses(allClasses)
-      setSelectedClassId(allClasses[0]?.id || null)
+      
+      // Check if there's a classId in the URL query parameters
+      const urlClassId = searchParams.get('classId')
+      const initialClassId = urlClassId && allClasses.find(c => c.id === urlClassId) 
+        ? urlClassId 
+        : allClasses[0]?.id || null
+      
+      setSelectedClassId(initialClassId)
+      
+      // Set the initial class info
+      const initialClass = allClasses.find(c => c.id === initialClassId) || null
+      setClassInfo(initialClass)
 
       // Fetch posts for this student (will be updated when class is selected)
-      await fetchPostsForClass(allClasses[0]?.id || null)
+      await fetchPostsForClass(initialClassId)
 
       // Fetch stats after all data is loaded
-      await fetchStudentStats(studentData, classData)
+      await fetchStudentStats(studentData, initialClass)
 
     } catch (error) {
       console.error('Error fetching student details:', error)

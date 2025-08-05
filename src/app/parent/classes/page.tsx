@@ -81,20 +81,20 @@ export default function ParentClassesPage() {
 
       const studentIds = studentParentsData.map(sp => sp.student_id)
 
-      // Get unique class IDs from children
-      const { data: studentsData, error: studentsError } = await supabase
-        .from('students')
-        .select('class_id')
-        .in('id', studentIds)
-        .not('class_id', 'is', null)
+      // Fetch class relationships for these students using student_class table
+      const { data: classRelationships, error: classError } = await supabase
+        .from('student_class')
+        .select('student_id, class_id')
+        .in('student_id', studentIds)
 
-      if (studentsError) {
-        console.error('Error fetching students:', studentsError)
+      if (classError) {
+        console.error('Error fetching class relationships:', classError)
         toast.error('Error fetching classes')
         return
       }
 
-      const classIds = [...new Set(studentsData?.map(s => s.class_id).filter(Boolean) || [])]
+      // Get unique class IDs from student_class relationships
+      const classIds = [...new Set(classRelationships?.map(cr => cr.class_id) || [])]
 
       if (classIds.length === 0) {
         setClasses([])
@@ -125,14 +125,30 @@ export default function ParentClassesPage() {
         return
       }
 
-      // For each class, get the children enrolled
+      // For each class, get the children enrolled using student_class relationships
       const classesWithChildren = await Promise.all(
         (classesData || []).map(async (classItem: any) => {
+          // Find students enrolled in this class using student_class table
+          const classStudentIds = classRelationships
+            ?.filter(cr => cr.class_id === classItem.id)
+            .map(cr => cr.student_id) || []
+
+          if (classStudentIds.length === 0) {
+            return {
+              id: classItem.id,
+              name: classItem.name,
+              created_at: classItem.created_at,
+              teacher_id: classItem.teacher_id,
+              teacher: classItem.teachers,
+              children: []
+            }
+          }
+
+          // Fetch student details for children in this class
           const { data: childrenData, error: childrenError } = await supabase
             .from('students')
             .select('id, name, created_at')
-            .eq('class_id', classItem.id)
-            .in('id', studentIds)
+            .in('id', classStudentIds)
 
           if (childrenError) {
             console.error('Error fetching children for class:', classItem.id, childrenError)
@@ -167,8 +183,15 @@ export default function ParentClassesPage() {
     }
   }
 
-  const handleViewClassDetails = (classId: string) => {
-    router.push(`/parent/classes/${classId}`)
+  const handleViewClassDetails = (classItem: Class) => {
+    // Find the first child in this class and redirect to their details
+    if (classItem.children && classItem.children.length > 0) {
+      const firstChild = classItem.children[0]
+      router.push(`/parent/children/${firstChild.id}?classId=${classItem.id}`)
+    } else {
+      // If no children in this class, redirect to the general children page
+      router.push('/parent/children')
+    }
   }
 
   if (loading) {
@@ -231,7 +254,7 @@ export default function ParentClassesPage() {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleViewClassDetails(classItem.id)}
+                      onClick={() => handleViewClassDetails(classItem)}
                     >
                       <Eye className="w-4 h-4 mr-2" />
                       View Details
