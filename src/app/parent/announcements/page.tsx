@@ -82,7 +82,6 @@ interface Class {
 interface Student {
   id: string
   name: string
-  class_id: string
 }
 
 export default function ParentAnnouncementsPage() {
@@ -127,8 +126,7 @@ export default function ParentAnnouncementsPage() {
         .select(`
           students!student_parent_student_id_fkey (
             id,
-            name,
-            class_id
+            name
           )
         `)
         .eq('parent_id', parentData.id)
@@ -146,11 +144,21 @@ export default function ParentAnnouncementsPage() {
         return
       }
 
-      // Get all class IDs from all students
-      const allClassIds = students.flatMap(s => 
-        s.class_id ? [s.class_id] : []
-      )
-      const classIds = [...new Set(allClassIds)]
+      // Get all class IDs from all students using the student_class table
+      const studentIds = students.map(s => s.id)
+      const { data: studentClassData, error: studentClassError } = await supabase
+        .from('student_class')
+        .select('class_id')
+        .in('student_id', studentIds)
+
+      if (studentClassError) {
+        console.error('Error fetching student-class relationships:', studentClassError)
+        setAnnouncements([])
+        return
+      }
+
+      // Extract unique class IDs from all student enrollments
+      const classIds = [...new Set(studentClassData?.map(sc => sc.class_id) || [])]
 
       if (classIds.length === 0) {
         setAnnouncements([])
