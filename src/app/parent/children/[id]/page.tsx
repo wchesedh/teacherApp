@@ -145,6 +145,9 @@ export default function ParentStudentProfilePage() {
     age: ''
   })
   const [reactingPosts, setReactingPosts] = useState<Set<string>>(new Set())
+  const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false)
+  const [classAnnouncements, setClassAnnouncements] = useState<Post[]>([])
+  const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
 
   useEffect(() => {
     if (studentId && user && !authLoading) {
@@ -742,6 +745,11 @@ export default function ParentStudentProfilePage() {
 
       // Refresh posts to update reaction counts
       await fetchStudentDetails()
+      
+      // If announcements modal is open, refresh announcements too
+      if (showAnnouncementsModal && classInfo) {
+        await fetchClassAnnouncements(classInfo.id)
+      }
 
     } catch (error) {
       console.error('Error handling reaction:', error)
@@ -782,6 +790,127 @@ export default function ParentStudentProfilePage() {
         return isActive ? 'text-green-600 bg-green-100' : 'text-green-600 hover:text-green-700'
       default:
         return isActive ? 'text-gray-600 bg-gray-100' : 'text-gray-600 hover:text-gray-700'
+    }
+  }
+
+  const fetchClassAnnouncements = async (classId: string) => {
+    if (!classId || !user) return
+
+    try {
+      setLoadingAnnouncements(true)
+
+      // Fetch all posts for this class
+      const { data: postsData, error: postsError } = await supabase
+        .from('posts')
+        .select(`
+          id,
+          content,
+          created_at,
+          class_id,
+          image_url,
+          file_url,
+          file_name,
+          file_urls,
+          file_names,
+          teachers (
+            id,
+            first_name,
+            middle_name,
+            last_name,
+            suffix,
+            name,
+            email
+          )
+        `)
+        .eq('class_id', classId)
+        .order('created_at', { ascending: false })
+
+      if (postsError) {
+        console.error('Error fetching class posts:', postsError)
+        setClassAnnouncements([])
+        return
+      }
+
+      if (postsData) {
+        // Filter out posts that are tagged with specific students (student posts)
+        const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+          .from('post_student_tags')
+          .select('post_id')
+          .in('post_id', postsData.map(post => post.id))
+
+        if (studentTagsError) {
+          console.error('Error fetching student tags:', studentTagsError)
+          // If we can't fetch student tags, show all posts as announcements
+        }
+
+        // Get the IDs of posts that are tagged with students
+        const studentTaggedPostIds = studentTaggedPosts?.map(tag => tag.post_id) || []
+
+        // Filter out student posts from announcements - only show class-wide announcements
+        const classAnnouncementsOnly = postsData.filter(
+          post => !studentTaggedPostIds.includes(post.id)
+        )
+
+        // For each announcement, fetch reactions
+        const announcementsWithReactions = await Promise.all(
+          classAnnouncementsOnly.map(async (post: any) => {
+            // Get reaction counts for this post
+            const { data: reactionCounts, error: reactionCountsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+
+            // Get user's reactions for this post
+            const { data: userReactions, error: userReactionsError } = await supabase
+              .from('post_reactions')
+              .select('reaction_type')
+              .eq('post_id', post.id)
+              .eq('parent_id', user.id)
+
+            // Calculate reaction counts
+            const reactions = {
+              thumbs_up: 0,
+              heart: 0,
+              clap: 0,
+              smile: 0
+            }
+
+            if (!reactionCountsError && reactionCounts) {
+              reactionCounts.forEach((reaction: any) => {
+                if (reactions.hasOwnProperty(reaction.reaction_type)) {
+                  reactions[reaction.reaction_type as keyof typeof reactions]++
+                }
+              })
+            }
+
+            // Get user's reactions
+            const userReactionTypes = userReactions?.map((r: any) => r.reaction_type) || []
+
+            return {
+              id: post.id,
+              content: post.content,
+              created_at: post.created_at,
+              teacher: post.teachers,
+              image_url: post.image_url,
+              file_url: post.file_url,
+              file_name: post.file_name,
+              file_urls: post.file_urls,
+              file_names: post.file_names,
+              reactions,
+              userReactions: userReactionTypes
+            }
+          })
+        )
+
+        setClassAnnouncements(announcementsWithReactions)
+      } else {
+        setClassAnnouncements([])
+      }
+    } catch (error) {
+      console.error('Error fetching class announcements:', error)
+      setClassAnnouncements([])
+    } finally {
+      setLoadingAnnouncements(false)
     }
   }
 
@@ -1320,7 +1449,21 @@ export default function ParentStudentProfilePage() {
                     <div className="space-y-4">
                       <div>
                         <Label>Class Name</Label>
-                        <p className="text-lg font-medium mt-1">{classInfo.name}</p>
+                        <div className="flex items-center justify-between mt-1">
+                          <p className="text-lg font-medium">{classInfo.name}</p>
+                          <Button
+                            onClick={() => {
+                              setShowAnnouncementsModal(true)
+                              fetchClassAnnouncements(classInfo.id)
+                            }}
+                            variant="outline"
+                            size="sm"
+                            className="ml-3"
+                          >
+                            <MessageSquare className="w-4 h-4 mr-2" />
+                            View Announcements
+                          </Button>
+                        </div>
                       </div>
                       
                       {classInfo.teacher && (
@@ -1467,6 +1610,149 @@ export default function ParentStudentProfilePage() {
             )}
           </div>
         </div>
+
+        {/* Class Announcements Modal */}
+        <Dialog open={showAnnouncementsModal} onOpenChange={setShowAnnouncementsModal}>
+          <DialogContent className="max-w-[99vw] max-h-[95vh] w-[99vw] h-[95vh] overflow-hidden flex flex-col p-0">
+            <DialogHeader className="flex-shrink-0 pb-4 border-b px-6 pt-6">
+              <DialogTitle className="flex items-center space-x-2 text-xl">
+                <MessageSquare className="w-6 h-6" />
+                <span>Class Announcements - {classInfo?.name}</span>
+              </DialogTitle>
+              <DialogDescription className="text-base">
+                All class-wide announcements from {classInfo?.teacher?.name || 'the teacher'}
+              </DialogDescription>
+            </DialogHeader>
+            
+            <div className="flex-1 overflow-hidden flex flex-col px-6">
+              {loadingAnnouncements ? (
+                <div className="flex items-center justify-center py-8">
+                  <div className="text-center">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+                    <p className="mt-2 text-gray-600">Loading announcements...</p>
+                  </div>
+                </div>
+              ) : classAnnouncements.length === 0 ? (
+                <div className="flex-1 flex items-center justify-center">
+                  <div className="text-center">
+                    <MessageSquare className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+                    <h3 className="text-xl font-medium text-gray-900 mb-2">No Announcements Yet</h3>
+                    <p className="text-gray-600 text-lg">
+                      There are no class announcements for {classInfo?.name} at this time.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto py-4">
+                  <div className="space-y-6">
+                  {classAnnouncements.map((announcement) => (
+                    <div key={announcement.id} className="border rounded-lg p-6 bg-white shadow-sm hover:shadow-md transition-shadow">
+                      <div className="flex items-start justify-between mb-2">
+                        <div className="flex items-center space-x-2">
+                          {announcement.teacher && (
+                            <span className="text-base font-medium text-blue-600 bg-blue-100 px-3 py-1 rounded">
+                              {getDisplayName(
+                                announcement.teacher.first_name || '',
+                                announcement.teacher.last_name || '',
+                                announcement.teacher.middle_name,
+                                announcement.teacher.suffix,
+                                announcement.teacher.name
+                              )}
+                            </span>
+                          )}
+                          <span className="text-base text-gray-500">
+                            {formatDateTime(announcement.created_at)}
+                          </span>
+                        </div>
+                      </div>
+                      
+                      <p className="text-gray-700 whitespace-pre-wrap text-lg mb-4 leading-relaxed">{announcement.content}</p>
+                      
+                      {/* Display multiple images if present */}
+                      {announcement.file_urls && announcement.file_urls.length > 0 && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                          {announcement.file_urls.map((url, index) => (
+                            <div key={index} className="relative">
+                              <img 
+                                src={url} 
+                                alt={`Announcement image ${index + 1}`} 
+                                className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                                onClick={() => window.open(url, '_blank')}
+                              />
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      
+                      {/* Fallback for old single file format */}
+                      {announcement.file_url && !announcement.file_urls && (
+                        announcement.file_url.match(/\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i) ? (
+                          <div className="mt-3 mb-3">
+                            <img 
+                              src={announcement.file_url} 
+                              alt="Announcement attachment" 
+                              className="max-w-full h-auto rounded-lg border cursor-pointer hover:opacity-90 transition-opacity" 
+                              style={{ maxHeight: 400 }}
+                              onClick={() => window.open(announcement.file_url, '_blank')}
+                            />
+                          </div>
+                        ) : (
+                          <div className="mt-3 mb-3">
+                            <a 
+                              href={announcement.file_url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-blue-600 underline hover:text-blue-800"
+                            >
+                              📎 {announcement.file_name || 'Download attachment'}
+                            </a>
+                          </div>
+                        )
+                      )}
+                      
+                      {/* Reaction buttons */}
+                      <div className="flex items-center space-x-4 text-sm mt-3">
+                        {['thumbs_up', 'heart', 'clap', 'smile'].map((reactionType) => {
+                          const isActive = announcement.userReactions?.includes(reactionType) || false
+                          const count = announcement.reactions?.[reactionType as keyof typeof announcement.reactions] || 0
+                          
+                          return (
+                            <button
+                              key={reactionType}
+                              type="button"
+                              disabled={reactingPosts.has(announcement.id)}
+                              onClick={() => handleReaction(announcement.id, reactionType)}
+                              className={`flex items-center space-x-1 px-2 py-1 rounded-full transition-colors ${
+                                isActive 
+                                  ? getReactionColor(reactionType, true)
+                                  : 'text-gray-500 hover:text-gray-700'
+                              } ${reactingPosts.has(announcement.id) ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                              title={`${reactionType.replace('_', ' ')}`}
+                            >
+                              {getReactionIcon(reactionType)}
+                              {count > 0 && <span className="text-xs">{count}</span>}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                  </div>
+                </div>
+              )}
+            </div>
+              
+            <div className="flex-shrink-0 flex justify-end pt-4 pb-6 px-6 border-t bg-gray-50">
+              <Button 
+                variant="outline" 
+                onClick={() => setShowAnnouncementsModal(false)}
+                className="px-6 py-2"
+              >
+                Close
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
         {/* Avatar Upload Dialog */}
         <Dialog open={showAvatarDialog} onOpenChange={setShowAvatarDialog}>
