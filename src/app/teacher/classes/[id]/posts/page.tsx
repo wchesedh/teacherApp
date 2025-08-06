@@ -186,8 +186,27 @@ export default function ClassPostsPage() {
         return;
       }
       if (postsData) {
-        // For each post, fetch reactions
-        const postsWithReactions = await Promise.all(postsData.map(async (post: any) => {
+        // Filter out posts that are tagged with specific students (student posts)
+        const { data: studentTaggedPosts, error: studentTagsError } = await supabase
+          .from('post_student_tags')
+          .select('post_id')
+          .in('post_id', postsData.map(post => post.id));
+
+        if (studentTagsError) {
+          console.error('Error fetching student tags:', studentTagsError);
+          // If we can't fetch student tags, show all posts as announcements
+        }
+
+        // Get the IDs of posts that are tagged with students
+        const studentTaggedPostIds = studentTaggedPosts?.map(tag => tag.post_id) || [];
+
+        // Filter out student posts from announcements - only show class-wide announcements
+        const classAnnouncementsOnly = postsData.filter(
+          post => !studentTaggedPostIds.includes(post.id)
+        );
+
+        // For each announcement, fetch reactions
+        const postsWithReactions = await Promise.all(classAnnouncementsOnly.map(async (post: any) => {
           const { data: reactionCounts, error: reactionCountsError } = await supabase
             .from('post_reactions')
             .select('reaction_type')
