@@ -254,29 +254,29 @@ export default function ParentPostsPage() {
                         <MessageSquare className="w-5 h-5 text-blue-600" />
                       </div>
                       <div>
-                        <div className="flex items-center space-x-2">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                           {post.teacher && (
                             <span className="text-sm font-medium text-blue-600">
                               {post.teacher.name}
                             </span>
                           )}
-                          {post.student && (
-                            <div className="flex items-center space-x-1">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {post.student && (
                               <Badge variant="outline" className="text-xs">
                                 {post.student.name}
                               </Badge>
-                              {post.student.class && (
-                                <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
-                                  📚 {post.student.class.name}
-                                </Badge>
-                              )}
-                              {post.student.class?.academic_period && (
-                                <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border border-green-200">
-                                  📅 {post.student.class.academic_period.name}
-                                </Badge>
-                              )}
-                            </div>
-                          )}
+                            )}
+                            {post.student?.class && (
+                              <Badge variant="secondary" className="text-xs bg-purple-100 text-purple-800 border border-purple-200">
+                                📚 {post.student.class.name}
+                              </Badge>
+                            )}
+                            {post.student?.class?.academic_period && (
+                              <Badge variant="secondary" className="text-xs bg-green-100 text-green-800 border border-green-200">
+                                📅 {post.student.class.academic_period.name}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                         <CardDescription className="flex items-center space-x-2 mt-1">
                           <Calendar className="w-3 h-3" />
