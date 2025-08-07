@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -11,7 +11,8 @@ import {
   Heart, 
   Star, 
   Smile,
-  Users
+  Users,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -88,11 +89,51 @@ export default function ParentAnnouncementsPage() {
   const { user } = useAuth()
   const [announcements, setAnnouncements] = useState<ClassAnnouncement[]>([])
   const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
+  
+  // Add ref to track if data has been fetched
+  const hasFetchedData = useRef(false)
 
   useEffect(() => {
-    if (user) {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (user && !hasFetchedData.current) {
+      hasFetchedData.current = true
       fetchAnnouncements()
+    } else if (!user) {
+      // Reset the ref when user is null
+      hasFetchedData.current = false
     }
+  }, [user])
+
+  // Add a function to manually refresh data
+  const refreshData = () => {
+    hasFetchedData.current = false
+    fetchAnnouncements()
+  }
+
+  // Add visibility change listener to refresh data when tab becomes visible
+  useEffect(() => {
+    let lastHiddenTime: number | null = null
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenTime = Date.now()
+      } else if (!document.hidden && user && hasFetchedData.current && lastHiddenTime) {
+        // Only refresh if we've been away for more than 10 minutes
+        const timeSinceHidden = Date.now() - lastHiddenTime
+        if (timeSinceHidden > 10 * 60 * 1000) { // 10 minutes
+          console.log('Tab became visible after being hidden for', timeSinceHidden / 1000 / 60, 'minutes, refreshing announcements data')
+          refreshData()
+        }
+        lastHiddenTime = null
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
 
   const fetchAnnouncements = async () => {
@@ -100,6 +141,9 @@ export default function ParentAnnouncementsPage() {
 
     try {
       setLoading(true)
+      
+      // Store the current fetch time
+      sessionStorage.setItem('lastAnnouncementsFetch', Date.now().toString())
 
       // First, find the parent record by auth user ID
       const { data: parentData, error: parentError } = await supabase
@@ -420,7 +464,7 @@ export default function ParentAnnouncementsPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasFetchedData.current && isClient) {
     return (
       <Layout>
         <div className="p-8">
@@ -440,17 +484,37 @@ export default function ParentAnnouncementsPage() {
       <div className="p-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-4">
-            <Link href="/parent" className="text-blue-600 hover:text-blue-800">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                Class Announcements
-              </h1>
-              <p className="text-gray-600 mt-2">
-                All announcements from your children's teachers
-              </p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <Link href="/parent" className="text-blue-600 hover:text-blue-800">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  Class Announcements
+                </h1>
+                <p className="text-gray-600 mt-2">
+                  All announcements from your children's teachers
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {loading && hasFetchedData.current && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Refreshing...</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshData}
+                disabled={loading}
+                className="text-xs"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </div>
           </div>
         </div>
