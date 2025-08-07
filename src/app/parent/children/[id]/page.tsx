@@ -1,7 +1,7 @@
 'use client'
 
 import { useParams, useSearchParams } from 'next/navigation'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -25,7 +25,8 @@ import {
   ThumbsUp,
   Heart,
   Star,
-  Smile
+  Smile,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -148,12 +149,52 @@ export default function ParentStudentProfilePage() {
   const [showAnnouncementsModal, setShowAnnouncementsModal] = useState(false)
   const [classAnnouncements, setClassAnnouncements] = useState<Post[]>([])
   const [loadingAnnouncements, setLoadingAnnouncements] = useState(false)
+  const [isClient, setIsClient] = useState(false)
+  
+  // Add ref to track if data has been fetched
+  const hasFetchedData = useRef(false)
 
   useEffect(() => {
-    if (studentId && user && !authLoading) {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (studentId && user && !authLoading && !hasFetchedData.current) {
+      hasFetchedData.current = true
       fetchStudentDetails()
+    } else if (!user) {
+      // Reset the ref when user is null
+      hasFetchedData.current = false
     }
   }, [studentId, user, authLoading])
+
+  // Add a function to manually refresh data
+  const refreshData = () => {
+    hasFetchedData.current = false
+    fetchStudentDetails()
+  }
+
+  // Add visibility change listener to refresh data when tab becomes visible
+  useEffect(() => {
+    let lastHiddenTime: number | null = null
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenTime = Date.now()
+      } else if (!document.hidden && user && hasFetchedData.current && lastHiddenTime) {
+        // Only refresh if we've been away for more than 10 minutes
+        const timeSinceHidden = Date.now() - lastHiddenTime
+        if (timeSinceHidden > 10 * 60 * 1000) { // 10 minutes
+          console.log('Tab became visible after being hidden for', timeSinceHidden / 1000 / 60, 'minutes, refreshing student details')
+          refreshData()
+        }
+        lastHiddenTime = null
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [user])
 
   const fetchPostsForClass = async (classId: string | null) => {
     if (!classId || !user) {
@@ -272,6 +313,9 @@ export default function ParentStudentProfilePage() {
   const fetchStudentDetails = async () => {
     try {
       setLoading(true)
+      
+      // Store the current fetch time
+      sessionStorage.setItem('lastStudentDetailsFetch', Date.now().toString())
 
       // Verify this student belongs to this parent
       const { data: studentParentData, error: studentParentError } = await supabase
@@ -914,7 +958,7 @@ export default function ParentStudentProfilePage() {
     }
   }
 
-  if (loading || authLoading) {
+  if ((loading || authLoading) && !hasFetchedData.current && isClient) {
     return (
       <Layout>
         <div className="p-8">
@@ -964,17 +1008,37 @@ export default function ParentStudentProfilePage() {
       <div className="p-8">
         {/* Header */}
         <div className="mb-8">
-          <div className="flex items-center space-x-4 mb-4">
-            <Link href="/parent/children" className="text-blue-600 hover:text-blue-800">
-              <ArrowLeft className="w-5 h-5" />
-            </Link>
-            <div>
-              <h1 className="text-3xl font-bold text-gray-900">
-                {student.name}'s Profile
-              </h1>
-              <p className="text-gray-600 mt-2">
-                View and manage your child's information
-              </p>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center space-x-4">
+              <Link href="/parent/children" className="text-blue-600 hover:text-blue-800">
+                <ArrowLeft className="w-5 h-5" />
+              </Link>
+              <div>
+                <h1 className="text-3xl font-bold text-gray-900">
+                  {student.name}'s Profile
+                </h1>
+                <p className="text-gray-600 mt-2">
+                  View and manage your child's information
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-2">
+              {loading && hasFetchedData.current && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Refreshing...</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshData}
+                disabled={loading}
+                className="text-xs"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
             </div>
           </div>
         </div>

@@ -38,6 +38,11 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
     last_name?: string
     suffix?: string
   } | null>(null)
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     if (user) {
@@ -185,7 +190,11 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
   ]
 
   const getNavItems = () => {
-    switch (user?.role) {
+    if (!isClient || !user?.role) {
+      return []
+    }
+    
+    switch (user.role) {
       case 'admin':
         return adminNavItems
       case 'teacher':
@@ -224,7 +233,9 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
               (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
             }`}>
               <h2 className="font-semibold text-gray-900">TrackWise</h2>
-              <p className="text-xs text-gray-500 capitalize">{user?.role} Portal</p>
+              <p className="text-xs text-gray-500 capitalize">
+                {isClient && user?.role ? `${user.role} Portal` : 'User Portal'}
+              </p>
             </div>
           </div>
           {isMobile && onClose && (
@@ -261,16 +272,16 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-900 truncate">
-                    {getDisplayName(
+                    {isClient ? getDisplayName(
                       userProfile?.first_name || user?.first_name, 
                       userProfile?.last_name || user?.last_name, 
                       userProfile?.middle_name || user?.middle_name, 
                       userProfile?.suffix || user?.suffix, 
                       user?.name
-                    )}
+                    ) : 'Loading...'}
                   </p>
                   <p className="text-xs text-gray-500 truncate">
-                    {user?.email}
+                    {isClient && user?.email ? user.email : 'Loading...'}
                   </p>
                 </div>
               </div>
@@ -281,75 +292,83 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
-        {navItems.map((item) => (
-          <div key={item.section}>
-            {item.items.length > 0 ? (
-              <div>
+        {!isClient ? (
+          <div className="space-y-2">
+            <div className="h-10 bg-gray-200 animate-pulse rounded"></div>
+            <div className="h-10 bg-gray-200 animate-pulse rounded"></div>
+            <div className="h-10 bg-gray-200 animate-pulse rounded"></div>
+          </div>
+        ) : (
+          navItems.map((item) => (
+            <div key={item.section}>
+              {item.items.length > 0 ? (
+                <div>
+                  <Button
+                    variant="ghost"
+                    className={cn(
+                      "w-full justify-between h-10 px-3 transition-all duration-200 hover:bg-gray-100",
+                      isCollapsed && !isMobile && "justify-center px-2"
+                    )}
+                    onClick={() => toggleSection(item.section)}
+                  >
+                    <div className="flex items-center space-x-3">
+                      <item.icon className="w-4 h-4 transition-transform duration-200" />
+                      <span className={`text-sm font-medium transition-all duration-300 ${
+                        (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
+                      }`}>
+                        {item.title}
+                      </span>
+                    </div>
+                    <div className={`transition-all duration-300 ${
+                      (!isCollapsed || isMobile) ? 'opacity-100' : 'opacity-0'
+                    }`}>
+                      {isExpanded(item.section) ? (
+                        <ChevronDown className="w-4 h-4 transition-transform duration-200" />
+                      ) : (
+                        <ChevronRight className="w-4 h-4 transition-transform duration-200" />
+                      )}
+                    </div>
+                  </Button>
+                  <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    (!isCollapsed || isMobile) && isExpanded(item.section) 
+                      ? 'max-h-96 opacity-100' 
+                      : 'max-h-0 opacity-0'
+                  }`}>
+                    <div className="ml-6 mt-1 space-y-1">
+                      {item.items.map((subItem) => (
+                        <Button
+                          key={subItem.href}
+                          variant="ghost"
+                          className="w-full justify-start h-8 px-3 text-sm transition-all duration-200 hover:bg-gray-100"
+                          onClick={() => handleNavigation(subItem.href)}
+                        >
+                          <subItem.icon className="w-4 h-4 mr-2" />
+                          {subItem.title}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              ) : (
                 <Button
                   variant="ghost"
                   className={cn(
-                    "w-full justify-between h-10 px-3 transition-all duration-200 hover:bg-gray-100",
+                    "w-full justify-start h-10 px-3 transition-all duration-200 hover:bg-gray-100",
                     isCollapsed && !isMobile && "justify-center px-2"
                   )}
-                  onClick={() => toggleSection(item.section)}
+                  onClick={() => handleNavigation(item.href || '/')}
                 >
-                  <div className="flex items-center space-x-3">
-                    <item.icon className="w-4 h-4 transition-transform duration-200" />
-                    <span className={`text-sm font-medium transition-all duration-300 ${
-                      (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
-                    }`}>
-                      {item.title}
-                    </span>
-                  </div>
-                  <div className={`transition-all duration-300 ${
-                    (!isCollapsed || isMobile) ? 'opacity-100' : 'opacity-0'
+                  <item.icon className="w-4 h-4" />
+                  <span className={`text-sm font-medium ml-3 transition-all duration-300 ${
+                    (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
                   }`}>
-                    {isExpanded(item.section) ? (
-                      <ChevronDown className="w-4 h-4 transition-transform duration-200" />
-                    ) : (
-                      <ChevronRight className="w-4 h-4 transition-transform duration-200" />
-                    )}
-                  </div>
+                    {item.title}
+                  </span>
                 </Button>
-                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                  (!isCollapsed || isMobile) && isExpanded(item.section) 
-                    ? 'max-h-96 opacity-100' 
-                    : 'max-h-0 opacity-0'
-                }`}>
-                  <div className="ml-6 mt-1 space-y-1">
-                    {item.items.map((subItem) => (
-                      <Button
-                        key={subItem.href}
-                        variant="ghost"
-                        className="w-full justify-start h-8 px-3 text-sm transition-all duration-200 hover:bg-gray-100"
-                        onClick={() => handleNavigation(subItem.href)}
-                      >
-                        <subItem.icon className="w-4 h-4 mr-2" />
-                        {subItem.title}
-                      </Button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <Button
-                variant="ghost"
-                className={cn(
-                  "w-full justify-start h-10 px-3 transition-all duration-200 hover:bg-gray-100",
-                  isCollapsed && !isMobile && "justify-center px-2"
-                )}
-                onClick={() => handleNavigation(item.href || '/')}
-              >
-                <item.icon className="w-4 h-4" />
-                <span className={`text-sm font-medium ml-3 transition-all duration-300 ${
-                  (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
-                }`}>
-                  {item.title}
-                </span>
-              </Button>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          ))
+        )}
       </nav>
     </div>
   )

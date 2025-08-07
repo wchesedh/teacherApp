@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -9,7 +9,8 @@ import {
   User, 
   GraduationCap,
   Calendar,
-  Eye
+  Eye,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -43,11 +44,51 @@ export default function ParentClassesPage() {
   const router = useRouter()
   const [classes, setClasses] = useState<Class[]>([])
   const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
+  
+  // Add ref to track if data has been fetched
+  const hasFetchedData = useRef(false)
 
   useEffect(() => {
-    if (user) {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (user && !hasFetchedData.current) {
+      hasFetchedData.current = true
       fetchClasses()
+    } else if (!user) {
+      // Reset the ref when user is null
+      hasFetchedData.current = false
     }
+  }, [user])
+
+  // Add a function to manually refresh data
+  const refreshData = () => {
+    hasFetchedData.current = false
+    fetchClasses()
+  }
+
+  // Add visibility change listener to refresh data when tab becomes visible
+  useEffect(() => {
+    let lastHiddenTime: number | null = null
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenTime = Date.now()
+      } else if (!document.hidden && user && hasFetchedData.current && lastHiddenTime) {
+        // Only refresh if we've been away for more than 10 minutes
+        const timeSinceHidden = Date.now() - lastHiddenTime
+        if (timeSinceHidden > 10 * 60 * 1000) { // 10 minutes
+          console.log('Tab became visible after being hidden for', timeSinceHidden / 1000 / 60, 'minutes, refreshing classes data')
+          refreshData()
+        }
+        lastHiddenTime = null
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
 
   const fetchClasses = async () => {
@@ -60,6 +101,9 @@ export default function ParentClassesPage() {
     try {
       setLoading(true)
       console.log('Fetching classes for parent:', user.email)
+      
+      // Store the current fetch time
+      sessionStorage.setItem('lastClassesFetch', Date.now().toString())
 
       // Get children linked to this parent
       const { data: studentParentsData, error: studentParentsError } = await supabase
@@ -194,7 +238,7 @@ export default function ParentClassesPage() {
     }
   }
 
-  if (loading) {
+  if (loading && !hasFetchedData.current && isClient) {
     return (
       <Layout>
         <div className="p-8">
@@ -214,12 +258,34 @@ export default function ParentClassesPage() {
       <div className="p-8">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
-            My Children's Classes
-          </h1>
-          <p className="text-gray-600 mt-2">
-            View classes where your children are enrolled
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-gray-900">
+                My Children's Classes
+              </h1>
+              <p className="text-gray-600 mt-2">
+                View classes where your children are enrolled
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {loading && hasFetchedData.current && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Refreshing...</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshData}
+                disabled={loading}
+                className="text-xs"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
         </div>
 
         {classes.length === 0 ? (

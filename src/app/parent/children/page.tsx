@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -10,7 +10,8 @@ import {
   User, 
   Calendar,
   Eye,
-  ChevronRight
+  ChevronRight,
+  RefreshCw
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/contexts/AuthContext'
@@ -47,11 +48,51 @@ export default function ParentChildrenPage() {
   const router = useRouter()
   const [children, setChildren] = useState<Child[]>([])
   const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
+  
+  // Add ref to track if data has been fetched
+  const hasFetchedData = useRef(false)
 
   useEffect(() => {
-    if (user) {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (user && !hasFetchedData.current) {
+      hasFetchedData.current = true
       fetchChildren()
+    } else if (!user) {
+      // Reset the ref when user is null
+      hasFetchedData.current = false
     }
+  }, [user])
+
+  // Add a function to manually refresh data
+  const refreshData = () => {
+    hasFetchedData.current = false
+    fetchChildren()
+  }
+
+  // Add visibility change listener to refresh data when tab becomes visible
+  useEffect(() => {
+    let lastHiddenTime: number | null = null
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        lastHiddenTime = Date.now()
+      } else if (!document.hidden && user && hasFetchedData.current && lastHiddenTime) {
+        // Only refresh if we've been away for more than 10 minutes
+        const timeSinceHidden = Date.now() - lastHiddenTime
+        if (timeSinceHidden > 10 * 60 * 1000) { // 10 minutes
+          console.log('Tab became visible after being hidden for', timeSinceHidden / 1000 / 60, 'minutes, refreshing children data')
+          refreshData()
+        }
+        lastHiddenTime = null
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
   }, [user])
 
   const fetchChildren = async () => {
@@ -64,6 +105,9 @@ export default function ParentChildrenPage() {
     try {
       setLoading(true)
       console.log('Fetching children for parent:', user.email)
+      
+      // Store the current fetch time
+      sessionStorage.setItem('lastChildrenFetch', Date.now().toString())
 
       // Get children linked to this parent
       const { data: studentParentsData, error: studentParentsError } = await supabase
@@ -189,7 +233,7 @@ export default function ParentChildrenPage() {
     router.push(`/parent/children/${childId}`)
   }
 
-  if (loading) {
+  if (loading && !hasFetchedData.current && isClient) {
     return (
       <Layout>
         <div className="p-4 sm:p-8">
@@ -209,12 +253,34 @@ export default function ParentChildrenPage() {
       <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
-            My Children
-          </h1>
-          <p className="text-sm sm:text-base text-gray-600 mt-2">
-            View information about your children and their classes
-          </p>
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+                My Children
+              </h1>
+              <p className="text-sm sm:text-base text-gray-600 mt-2">
+                View information about your children and their classes
+              </p>
+            </div>
+            <div className="flex items-center space-x-2">
+              {loading && hasFetchedData.current && (
+                <div className="flex items-center space-x-2 text-sm text-gray-500">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
+                  <span>Refreshing...</span>
+                </div>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={refreshData}
+                disabled={loading}
+                className="text-xs"
+              >
+                <RefreshCw className={`w-3 h-3 mr-1 ${loading ? 'animate-spin' : ''}`} />
+                Refresh
+              </Button>
+            </div>
+          </div>
         </div>
 
         {children.length === 0 ? (

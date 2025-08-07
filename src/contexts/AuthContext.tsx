@@ -17,6 +17,11 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null)
   const [loading, setLoading] = useState(true)
+  const [isClient, setIsClient] = useState(false)
+
+  useEffect(() => {
+    setIsClient(true)
+  }, [])
 
   useEffect(() => {
     // Get initial session
@@ -34,6 +39,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           console.log('Setting user from session:', authUser)
           setUser(authUser)
+          // Persist user data to sessionStorage only on client
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('authUser', JSON.stringify(authUser))
+          }
+        } else if (isClient) {
+          // Only try to get from sessionStorage on client side
+          const storedUser = sessionStorage.getItem('authUser')
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser)
+              setUser(parsedUser)
+            } catch (e) {
+              console.error('Error parsing stored user:', e)
+              sessionStorage.removeItem('authUser')
+            }
+          }
         }
       } catch (error) {
         console.error('Error getting initial session:', error)
@@ -57,16 +78,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
           console.log('Setting user from auth change:', authUser)
           setUser(authUser)
+          // Persist user data to sessionStorage
+          if (typeof window !== 'undefined') {
+            sessionStorage.setItem('authUser', JSON.stringify(authUser))
+          }
         } else {
           console.log('Clearing user')
           setUser(null)
+          // Clear user data from sessionStorage
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('authUser')
+          }
         }
         setLoading(false)
       }
     )
 
     return () => subscription.unsubscribe()
-  }, [])
+  }, [isClient])
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -140,6 +169,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.log('Signing out')
       const { error } = await supabase.auth.signOut()
       console.log('Sign out result:', error)
+      
+      // Clear stored data
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem('authUser')
+        sessionStorage.removeItem('lastDataFetch')
+      }
+      
       return { error }
     } catch (err) {
       console.error('Sign out error:', err)
