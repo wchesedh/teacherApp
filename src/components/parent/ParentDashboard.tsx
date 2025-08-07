@@ -687,7 +687,7 @@ export default function ParentDashboard() {
   if (loading) {
     return (
       <Layout>
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -701,26 +701,26 @@ export default function ParentDashboard() {
 
   return (
     <Layout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             Parent Dashboard
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm sm:text-base text-gray-600 mt-2">
             Welcome back, {user?.name}! Stay connected with your children's education.
           </p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid gap-6 mb-8 md:grid-cols-3">
+        <div className="grid gap-4 sm:gap-6 mb-6 sm:mb-8 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Your Children</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Your Children</CardTitle>
               <GraduationCap className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.children}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.children}</div>
               <p className="text-xs text-muted-foreground">
                 Students registered
               </p>
@@ -729,24 +729,24 @@ export default function ParentDashboard() {
 
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Classes</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Classes</CardTitle>
               <BookOpen className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.classes}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.classes}</div>
               <p className="text-xs text-muted-foreground">
                 Active classes
               </p>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="sm:col-span-2 lg:col-span-1">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Updates</CardTitle>
+              <CardTitle className="text-xs sm:text-sm font-medium">Updates</CardTitle>
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold">{stats.posts}</div>
+              <div className="text-xl sm:text-2xl font-bold">{stats.posts}</div>
               <p className="text-xs text-muted-foreground">
                 Teacher posts
               </p>
@@ -757,55 +757,55 @@ export default function ParentDashboard() {
         {/* Class Announcements Section */}
         <Card className="mb-6">
           <CardHeader>
-            <CardTitle className="flex items-center space-x-2">
-              <MessageSquare className="w-5 h-5" />
+            <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+              <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
               <span>Class Announcements</span>
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-sm">
               Important announcements from your children's teachers for entire classes
             </CardDescription>
           </CardHeader>
           <CardContent>
             {classAnnouncements.length === 0 ? (
-              <div className="text-center py-8">
-                <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900">No Class Announcements</h3>
-                <p className="text-gray-600">
+              <div className="text-center py-6 sm:py-8">
+                <MessageSquare className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-base sm:text-lg font-medium text-gray-900">No Class Announcements</h3>
+                <p className="text-sm text-gray-600">
                   Teachers will post class-wide announcements here when available.
                 </p>
               </div>
             ) : (
               <div className="space-y-4">
                 {classAnnouncements.slice(0, 3).map((announcement) => (
-                  <div key={announcement.id} className="border rounded-lg p-4">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex items-center space-x-2">
+                  <div key={announcement.id} className="border rounded-lg p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 space-y-2 sm:space-y-0">
+                      <div className="flex flex-wrap items-center gap-2">
                         {announcement.teacher && (
-                          <span className="text-sm font-medium text-blue-600">
+                          <span className="text-xs sm:text-sm font-medium text-blue-600">
                             {announcement.teacher.name}
                           </span>
                         )}
                         {announcement.class && (
-                          <span className="text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                          <span className="text-xs sm:text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
                             {announcement.class.name}
                           </span>
                         )}
                       </div>
-                      <span className="text-sm text-gray-500">
+                      <span className="text-xs sm:text-sm text-gray-500">
                         {formatDateTime(announcement.created_at)}
                       </span>
                     </div>
-                    <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{announcement.content}</p>
+                    <p className="text-gray-600 whitespace-pre-wrap text-xs sm:text-sm mb-3">{announcement.content}</p>
                     
                     {/* Display multiple images if present */}
                     {announcement.file_urls && announcement.file_urls.length > 0 && (
-                      <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                         {announcement.file_urls.map((url, index) => (
                           <div key={index} className="relative">
                             <img 
                               src={url} 
                               alt={`Announcement image ${index + 1}`} 
-                              className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                              className="w-full h-32 sm:h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
                               onClick={() => window.open(url, '_blank')}
                             />
                           </div>
@@ -830,49 +830,49 @@ export default function ParentDashboard() {
                             href={announcement.file_url} 
                             target="_blank"
                             rel="noopener noreferrer" 
-                            className="text-blue-600 underline hover:text-blue-800"
+                            className="text-blue-600 underline hover:text-blue-800 text-sm"
                           >
                             📎 {announcement.file_name || 'Download attachment'}
                           </a>
                         </div>
                       )
                     )}
-                    <div className="flex items-center mt-4 space-x-2">
+                    <div className="flex flex-wrap items-center mt-4 gap-1 sm:gap-2">
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleReaction(announcement.id, 'thumbs_up', true)}
-                        className={`${getReactionColor('thumbs_up')} ${announcement.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''}`}
+                        className={`${getReactionColor('thumbs_up')} ${announcement.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''} text-xs sm:text-sm`}
                       >
-                        <ThumbsUp className="w-4 h-4" />
-                        {announcement.reactions?.thumbs_up || 0}
+                        <ThumbsUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="ml-1">{announcement.reactions?.thumbs_up || 0}</span>
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleReaction(announcement.id, 'heart', true)}
-                        className={`${getReactionColor('heart')} ${announcement.userReactions?.includes('heart') ? 'text-red-600' : ''}`}
+                        className={`${getReactionColor('heart')} ${announcement.userReactions?.includes('heart') ? 'text-red-600' : ''} text-xs sm:text-sm`}
                       >
-                        <Heart className="w-4 h-4" />
-                        {announcement.reactions?.heart || 0}
+                        <Heart className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="ml-1">{announcement.reactions?.heart || 0}</span>
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleReaction(announcement.id, 'clap', true)}
-                        className={`${getReactionColor('clap')} ${announcement.userReactions?.includes('clap') ? 'text-yellow-600' : ''}`}
+                        className={`${getReactionColor('clap')} ${announcement.userReactions?.includes('clap') ? 'text-yellow-600' : ''} text-xs sm:text-sm`}
                       >
-                        <Star className="w-4 h-4" />
-                        {announcement.reactions?.clap || 0}
+                        <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="ml-1">{announcement.reactions?.clap || 0}</span>
                       </Button>
                       <Button
                         variant="ghost"
                         size="sm"
                         onClick={() => handleReaction(announcement.id, 'smile', true)}
-                        className={`${getReactionColor('smile')} ${announcement.userReactions?.includes('smile') ? 'text-green-600' : ''}`}
+                        className={`${getReactionColor('smile')} ${announcement.userReactions?.includes('smile') ? 'text-green-600' : ''} text-xs sm:text-sm`}
                       >
-                        <Smile className="w-4 h-4" />
-                        {announcement.reactions?.smile || 0}
+                        <Smile className="w-3 h-3 sm:w-4 sm:h-4" />
+                        <span className="ml-1">{announcement.reactions?.smile || 0}</span>
                       </Button>
                     </div>
                   </div>
@@ -885,10 +885,11 @@ export default function ParentDashboard() {
                         size="sm"
                         onClick={() => setLoadingAnnouncements(true)}
                         disabled={loadingAnnouncements}
+                        className="text-xs sm:text-sm"
                       >
                         {loadingAnnouncements ? (
                           <>
-                            <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
+                            <div className="animate-spin rounded-full h-3 w-3 sm:h-4 sm:w-4 border-b-2 border-blue-600 mr-2"></div>
                             Loading...
                           </>
                         ) : (
@@ -903,47 +904,47 @@ export default function ParentDashboard() {
           </CardContent>
         </Card>
 
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Children Section */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <GraduationCap className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+                <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Your Children</span>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm">
                 View your children's classes and teachers
               </CardDescription>
             </CardHeader>
             <CardContent>
               {students.length === 0 ? (
-                <div className="text-center py-8">
-                  <GraduationCap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Children Found</h3>
-                  <p className="text-gray-600 mb-4">
+                <div className="text-center py-6 sm:py-8">
+                  <GraduationCap className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No Children Found</h3>
+                  <p className="text-sm text-gray-600 mb-4">
                     Your children haven't been linked to your account yet. Please contact your school administrator.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {students.map((student) => (
-                    <div key={student.id} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
+                    <div key={student.id} className="border rounded-lg p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-3 space-y-3 sm:space-y-0">
                         <div className="flex items-center space-x-3">
                           {student.avatar_url ? (
                             <img 
                               src={student.avatar_url} 
                               alt={`${student.name} avatar`} 
-                              className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                              className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border border-gray-200"
                             />
                           ) : (
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                              <GraduationCap className="w-5 h-5 text-blue-600" />
+                            <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center">
+                              <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                             </div>
                           )}
                           <div>
-                            <h4 className="font-medium text-gray-900">{student.name}</h4>
-                            <p className="text-sm text-gray-600">Student</p>
+                            <h4 className="font-medium text-gray-900 text-sm sm:text-base">{student.name}</h4>
+                            <p className="text-xs sm:text-sm text-gray-600">Student</p>
                           </div>
                         </div>
                         <Link href={`/parent/children/${student.id}`}>
@@ -954,6 +955,7 @@ export default function ParentDashboard() {
                               setLoadingStudentDetails(prev => new Set(prev).add(student.id))
                             }}
                             disabled={loadingStudentDetails.has(student.id)}
+                            className="text-xs sm:text-sm"
                           >
                             {loadingStudentDetails.has(student.id) ? (
                               <>
@@ -962,7 +964,7 @@ export default function ParentDashboard() {
                               </>
                             ) : (
                               <>
-                                <Eye className="w-4 h-4 mr-1" />
+                                <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1" />
                                 View Details
                               </>
                             )}
@@ -973,20 +975,20 @@ export default function ParentDashboard() {
                       {student.classes && student.classes.length > 0 ? (
                         <div className="space-y-2">
                           <div className="flex items-center space-x-2">
-                            <BookOpen className="w-4 h-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">Classes:</span>
+                            <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                            <span className="text-xs sm:text-sm text-gray-600">Classes:</span>
                           </div>
                           <div className="flex flex-wrap gap-2">
                             {student.classes.map((classItem, index) => (
-                              <div key={classItem.id} className="flex items-center space-x-2">
-                                <Badge variant="secondary">{classItem.name}</Badge>
+                              <div key={classItem.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                <Badge variant="secondary" className="text-xs">{classItem.name}</Badge>
                                 {classItem.teacher && (
                                   <span className="text-xs text-gray-500">
                                     ({classItem.teacher.name})
                                   </span>
                                 )}
                                 {index < student.classes!.length - 1 && (
-                                  <span className="text-xs text-gray-400">•</span>
+                                  <span className="text-xs text-gray-400 hidden sm:inline">•</span>
                                 )}
                               </div>
                             ))}
@@ -994,19 +996,23 @@ export default function ParentDashboard() {
                         </div>
                       ) : student.class ? (
                         <div className="space-y-2">
-                          <div className="flex items-center space-x-2">
-                            <BookOpen className="w-4 h-4 text-gray-500" />
-                            <span className="text-sm text-gray-600">Class:</span>
-                            <Badge variant="secondary">{student.class.name}</Badge>
+                          <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                            <div className="flex items-center space-x-2">
+                              <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                              <span className="text-xs sm:text-sm text-gray-600">Class:</span>
+                            </div>
+                            <Badge variant="secondary" className="text-xs">{student.class.name}</Badge>
                           </div>
                           {student.class.teacher && (
-                            <div className="flex items-center space-x-2">
-                              <User className="w-4 h-4 text-gray-500" />
-                              <span className="text-sm text-gray-600">Teacher:</span>
-                              <span className="text-sm font-medium">{student.class.teacher.name}</span>
+                            <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                              <div className="flex items-center space-x-2">
+                                <User className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                                <span className="text-xs sm:text-sm text-gray-600">Teacher:</span>
+                              </div>
+                              <span className="text-xs sm:text-sm font-medium">{student.class.teacher.name}</span>
                               {student.class.teacher.email && (
                                 <div className="flex items-center space-x-1">
-                                  <Mail className="w-3 h-3 text-gray-400" />
+                                  <Mail className="w-2 h-2 sm:w-3 sm:h-3 text-gray-400" />
                                   <span className="text-xs text-gray-500">{student.class.teacher.email}</span>
                                 </div>
                               )}
@@ -1014,7 +1020,7 @@ export default function ParentDashboard() {
                           )}
                         </div>
                       ) : (
-                        <p className="text-sm text-gray-500">Not assigned to a class yet</p>
+                        <p className="text-xs sm:text-sm text-gray-500">Not assigned to a class yet</p>
                       )}
                     </div>
                   ))}
@@ -1026,60 +1032,60 @@ export default function ParentDashboard() {
           {/* Recent Updates Section */}
           <Card>
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5" />
+              <CardTitle className="flex items-center space-x-2 text-base sm:text-lg">
+                <MessageSquare className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Recent Updates</span>
               </CardTitle>
-              <CardDescription>
+              <CardDescription className="text-sm">
                 Latest posts from your children's teachers
               </CardDescription>
             </CardHeader>
             <CardContent>
               {posts.length === 0 ? (
-                <div className="text-center py-8">
-                  <MessageSquare className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No Updates Yet</h3>
-                  <p className="text-gray-600">
+                <div className="text-center py-6 sm:py-8">
+                  <MessageSquare className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No Updates Yet</h3>
+                  <p className="text-sm text-gray-600">
                     Teachers will post updates about your children's progress here.
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {posts.slice(0, 5).map((post) => (
-                    <div key={post.id} className="border rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center space-x-2">
+                    <div key={post.id} className="border rounded-lg p-3 sm:p-4">
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 space-y-2 sm:space-y-0">
+                        <div className="flex flex-wrap items-center gap-2">
                           {post.teacher && (
-                            <span className="text-sm font-medium text-blue-600">
+                            <span className="text-xs sm:text-sm font-medium text-blue-600">
                               {post.teacher.name}
                             </span>
                           )}
                           {post.student && (
-                            <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                            <span className="text-xs sm:text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
                               {post.student.name}
                             </span>
                           )}
                           {post.class && (
-                            <span className="text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
+                            <span className="text-xs sm:text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
                               {post.class.name}
                             </span>
                           )}
                         </div>
-                        <span className="text-sm text-gray-500">
+                        <span className="text-xs sm:text-sm text-gray-500">
                           {formatDateTime(post.created_at)}
                         </span>
                       </div>
-                      <p className="text-gray-600 whitespace-pre-wrap text-sm mb-3">{post.content}</p>
+                      <p className="text-gray-600 whitespace-pre-wrap text-xs sm:text-sm mb-3">{post.content}</p>
                       
                       {/* Display multiple images if present */}
                       {post.file_urls && post.file_urls.length > 0 && (
-                        <div className="mt-3 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                        <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
                           {post.file_urls.map((url, index) => (
                             <div key={index} className="relative">
                               <img 
                                 src={url} 
                                 alt={`Post image ${index + 1}`} 
-                                className="w-full h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
+                                className="w-full h-32 sm:h-48 object-cover rounded-lg border cursor-pointer hover:opacity-90 transition-opacity"
                                 onClick={() => window.open(url, '_blank')}
                               />
                             </div>
@@ -1098,49 +1104,49 @@ export default function ParentDashboard() {
                           />
                         </div>
                       )}
-                      <div className="flex items-center mt-2 space-x-2">
+                      <div className="flex flex-wrap items-center mt-2 gap-1 sm:gap-2">
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReaction(post.id, 'thumbs_up', false)}
-                          className={`${getReactionColor('thumbs_up')} ${post.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''}`}
+                          className={`${getReactionColor('thumbs_up')} ${post.userReactions?.includes('thumbs_up') ? 'text-blue-600' : ''} text-xs sm:text-sm`}
                         >
-                          <ThumbsUp className="w-4 h-4" />
-                          {post.reactions?.thumbs_up || 0}
+                          <ThumbsUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span className="ml-1">{post.reactions?.thumbs_up || 0}</span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReaction(post.id, 'heart', false)}
-                          className={`${getReactionColor('heart')} ${post.userReactions?.includes('heart') ? 'text-red-600' : ''}`}
+                          className={`${getReactionColor('heart')} ${post.userReactions?.includes('heart') ? 'text-red-600' : ''} text-xs sm:text-sm`}
                         >
-                          <Heart className="w-4 h-4" />
-                          {post.reactions?.heart || 0}
+                          <Heart className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span className="ml-1">{post.reactions?.heart || 0}</span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReaction(post.id, 'clap', false)}
-                          className={`${getReactionColor('clap')} ${post.userReactions?.includes('clap') ? 'text-yellow-600' : ''}`}
+                          className={`${getReactionColor('clap')} ${post.userReactions?.includes('clap') ? 'text-yellow-600' : ''} text-xs sm:text-sm`}
                         >
-                          <Star className="w-4 h-4" />
-                          {post.reactions?.clap || 0}
+                          <Star className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span className="ml-1">{post.reactions?.clap || 0}</span>
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           onClick={() => handleReaction(post.id, 'smile', false)}
-                          className={`${getReactionColor('smile')} ${post.userReactions?.includes('smile') ? 'text-green-600' : ''}`}
+                          className={`${getReactionColor('smile')} ${post.userReactions?.includes('smile') ? 'text-green-600' : ''} text-xs sm:text-sm`}
                         >
-                          <Smile className="w-4 h-4" />
-                          {post.reactions?.smile || 0}
+                          <Smile className="w-3 h-3 sm:w-4 sm:h-4" />
+                          <span className="ml-1">{post.reactions?.smile || 0}</span>
                         </Button>
                       </div>
                     </div>
                   ))}
                   {posts.length > 5 && (
                     <div className="text-center pt-4">
-                      <Button variant="outline" size="sm">
+                      <Button variant="outline" size="sm" className="text-xs sm:text-sm">
                         View All Updates
                       </Button>
                     </div>

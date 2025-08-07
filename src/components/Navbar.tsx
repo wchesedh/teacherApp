@@ -42,10 +42,11 @@ interface Notification {
 
 interface NavbarProps {
   onToggleSidebar?: () => void
+  onToggleMobileSidebar?: () => void
   isSidebarCollapsed?: boolean
 }
 
-export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: NavbarProps) {
+export default function Navbar({ onToggleSidebar, onToggleMobileSidebar, isSidebarCollapsed = false }: NavbarProps) {
   const { user, signOut } = useAuth()
   const { activePeriod } = useActivePeriod()
   const router = useRouter()
@@ -311,16 +312,29 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: 
   return (
     <nav className="bg-white border-b border-gray-200 p-4">
       <div className="flex items-center justify-between">
-        {/* Left side - Sidebar toggle and empty space to align with sidebar */}
+        {/* Left side - Sidebar toggle */}
         <div className="flex items-center space-x-3">
+          {/* Mobile sidebar toggle - visible on mobile */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onToggleMobileSidebar}
+            className="p-2 md:hidden"
+          >
+            <Menu className="w-4 h-4" />
+          </Button>
+          
+          {/* Desktop sidebar toggle - visible on desktop */}
           <Button
             variant="ghost"
             size="sm"
             onClick={onToggleSidebar}
-            className="p-2"
+            className="p-2 hidden md:block"
           >
             <Menu className="w-4 h-4" />
           </Button>
+          
+          {/* Spacer to align with sidebar */}
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-transparent rounded-lg flex items-center justify-center">
             </div>
@@ -344,7 +358,8 @@ export default function Navbar({ onToggleSidebar, isSidebarCollapsed = false }: 
               >
                 <Badge variant="secondary" className="bg-green-100 text-green-800 border-green-200">
                   <Calendar className="w-3 h-3 mr-1" />
-                  {activePeriod.name}
+                  <span className="hidden sm:inline">{activePeriod.name}</span>
+                  <span className="sm:hidden">Period</span>
                 </Badge>
               </Button>
             </div>

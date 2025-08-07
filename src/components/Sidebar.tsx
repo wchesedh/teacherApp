@@ -14,7 +14,8 @@ import {
   ChevronDown,
   ChevronRight,
   User,
-  Calendar
+  Calendar,
+  X
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
@@ -23,9 +24,11 @@ import { getDisplayName } from '@/lib/utils'
 interface SidebarProps {
   className?: string
   isCollapsed?: boolean
+  onClose?: () => void
+  isMobile?: boolean
 }
 
-export default function Sidebar({ className, isCollapsed = false }: SidebarProps) {
+export default function Sidebar({ className, isCollapsed = false, onClose, isMobile = false }: SidebarProps) {
   const { user, signOut } = useAuth()
   const [expandedSections, setExpandedSections] = useState<string[]>(['dashboard', 'management', 'communication', 'children'])
   const [userProfile, setUserProfile] = useState<{
@@ -196,29 +199,51 @@ export default function Sidebar({ className, isCollapsed = false }: SidebarProps
 
   const navItems = getNavItems()
 
+  const handleNavigation = (href: string) => {
+    if (isMobile && onClose) {
+      onClose()
+    }
+    window.location.href = href
+  }
+
   return (
     <div className={cn(
-      "bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-300",
+      "bg-white border-r border-gray-200 h-screen flex flex-col transition-all duration-300 ease-in-out",
       isCollapsed ? "w-16" : "w-64",
+      isMobile && "w-64",
       className
     )}>
       {/* Header */}
       <div className="p-4 border-b border-gray-200">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-600 shadow-lg">
-            <span className="text-white font-bold text-sm tracking-wider">TW</span>
-          </div>
-          {!isCollapsed && (
-            <div>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-gradient-to-br from-blue-600 to-purple-600 shadow-lg">
+              <span className="text-white font-bold text-sm tracking-wider">TW</span>
+            </div>
+            <div className={`transition-all duration-300 ease-in-out ${
+              (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
+            }`}>
               <h2 className="font-semibold text-gray-900">TrackWise</h2>
               <p className="text-xs text-gray-500 capitalize">{user?.role} Portal</p>
             </div>
+          </div>
+          {isMobile && onClose && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClose}
+              className="p-1 hover:bg-gray-100 transition-colors duration-200"
+            >
+              <X className="w-5 h-5" />
+            </Button>
           )}
         </div>
       </div>
 
       {/* User Info */}
-      {!isCollapsed && (
+      <div className={`transition-all duration-300 ease-in-out ${
+        (!isCollapsed || isMobile) ? 'opacity-100 max-h-32' : 'opacity-0 max-h-0 overflow-hidden'
+      }`}>
         <div className="p-4 border-b border-gray-200">
           <Card>
             <CardContent className="p-3">
@@ -252,7 +277,7 @@ export default function Sidebar({ className, isCollapsed = false }: SidebarProps
             </CardContent>
           </Card>
         </div>
-      )}
+      </div>
 
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-2 overflow-y-auto">
@@ -263,50 +288,64 @@ export default function Sidebar({ className, isCollapsed = false }: SidebarProps
                 <Button
                   variant="ghost"
                   className={cn(
-                    "w-full justify-between h-10 px-3",
-                    isCollapsed && "justify-center px-2"
+                    "w-full justify-between h-10 px-3 transition-all duration-200 hover:bg-gray-100",
+                    isCollapsed && !isMobile && "justify-center px-2"
                   )}
                   onClick={() => toggleSection(item.section)}
                 >
                   <div className="flex items-center space-x-3">
-                    <item.icon className="w-4 h-4" />
-                    {!isCollapsed && <span className="text-sm font-medium">{item.title}</span>}
+                    <item.icon className="w-4 h-4 transition-transform duration-200" />
+                    <span className={`text-sm font-medium transition-all duration-300 ${
+                      (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
+                    }`}>
+                      {item.title}
+                    </span>
                   </div>
-                  {!isCollapsed && (
-                    isExpanded(item.section) ? (
-                      <ChevronDown className="w-4 h-4" />
+                  <div className={`transition-all duration-300 ${
+                    (!isCollapsed || isMobile) ? 'opacity-100' : 'opacity-0'
+                  }`}>
+                    {isExpanded(item.section) ? (
+                      <ChevronDown className="w-4 h-4 transition-transform duration-200" />
                     ) : (
-                      <ChevronRight className="w-4 h-4" />
-                    )
-                  )}
+                      <ChevronRight className="w-4 h-4 transition-transform duration-200" />
+                    )}
+                  </div>
                 </Button>
-                {!isCollapsed && isExpanded(item.section) && (
+                <div className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                  (!isCollapsed || isMobile) && isExpanded(item.section) 
+                    ? 'max-h-96 opacity-100' 
+                    : 'max-h-0 opacity-0'
+                }`}>
                   <div className="ml-6 mt-1 space-y-1">
                     {item.items.map((subItem) => (
                       <Button
                         key={subItem.href}
                         variant="ghost"
-                        className="w-full justify-start h-8 px-3 text-sm"
-                        onClick={() => window.location.href = subItem.href}
+                        className="w-full justify-start h-8 px-3 text-sm transition-all duration-200 hover:bg-gray-100"
+                        onClick={() => handleNavigation(subItem.href)}
                       >
                         <subItem.icon className="w-4 h-4 mr-2" />
                         {subItem.title}
                       </Button>
                     ))}
                   </div>
-                )}
+                </div>
               </div>
             ) : (
               <Button
                 variant="ghost"
                 className={cn(
-                  "w-full justify-start h-10 px-3",
-                  isCollapsed && "justify-center px-2"
+                  "w-full justify-start h-10 px-3 transition-all duration-200 hover:bg-gray-100",
+                  isCollapsed && !isMobile && "justify-center px-2"
                 )}
-                onClick={() => window.location.href = item.href || '/'}
+                onClick={() => handleNavigation(item.href || '/')}
               >
                 <item.icon className="w-4 h-4" />
-                {!isCollapsed && <span className="text-sm font-medium ml-3">{item.title}</span>}
+                <span className={`text-sm font-medium ml-3 transition-all duration-300 ${
+                  (!isCollapsed || isMobile) ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'
+                }`}>
+                  {item.title}
+                </span>
               </Button>
             )}
           </div>
