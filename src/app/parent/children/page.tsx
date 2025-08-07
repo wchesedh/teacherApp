@@ -192,7 +192,7 @@ export default function ParentChildrenPage() {
   if (loading) {
     return (
       <Layout>
-        <div className="p-8">
+        <div className="p-4 sm:p-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
@@ -206,56 +206,58 @@ export default function ParentChildrenPage() {
 
   return (
     <Layout>
-      <div className="p-8">
+      <div className="p-4 sm:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
             My Children
           </h1>
-          <p className="text-gray-600 mt-2">
+          <p className="text-sm sm:text-base text-gray-600 mt-2">
             View information about your children and their classes
           </p>
         </div>
 
         {children.length === 0 ? (
           <Card>
-            <CardContent className="p-8">
+            <CardContent className="p-6 sm:p-8">
               <div className="text-center">
-                <GraduationCap className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 mb-2">No Children Found</h3>
-                <p className="text-gray-600">
+                <GraduationCap className="w-8 h-8 sm:w-12 sm:h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-base sm:text-lg font-medium text-gray-900 mb-2">No Children Found</h3>
+                <p className="text-sm text-gray-600">
                   Your children haven't been linked to your account yet. Please contact the school administrator.
                 </p>
               </div>
             </CardContent>
           </Card>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
             {children.map((child) => (
               <Card key={child.id} className="hover:shadow-md transition-shadow">
-                <CardHeader>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-3">
+                <CardHeader className="p-4 sm:p-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between space-y-3 sm:space-y-0">
+                    <div className="flex items-center space-x-3 flex-1">
                       {child.avatar_url ? (
                         <img 
                           src={child.avatar_url} 
                           alt={`${child.name} avatar`} 
-                          className="w-10 h-10 rounded-full object-cover border border-gray-200"
+                          className="w-8 h-8 sm:w-10 sm:h-10 rounded-full object-cover border border-gray-200 flex-shrink-0"
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                          <GraduationCap className="w-5 h-5 text-blue-600" />
+                        <div className="w-8 h-8 sm:w-10 sm:h-10 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0">
+                          <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-blue-600" />
                         </div>
                       )}
-                      <div>
-                        <CardTitle className="text-lg">{child.name}</CardTitle>
-                        <CardDescription>
+                      <div className="flex-1 min-w-0">
+                        <CardTitle className="text-base sm:text-lg">{child.name}</CardTitle>
+                        <CardDescription className="text-xs sm:text-sm">
                           {child.id_number && (
-                            <Badge variant="default" className="mr-2">
+                            <Badge variant="default" className="mr-2 text-xs">
                               ID: {child.id_number}
                             </Badge>
                           )}
-                          Joined {new Date(child.created_at).toLocaleDateString()}
+                          <span className="block sm:inline">
+                            Joined {new Date(child.created_at).toLocaleDateString()}
+                          </span>
                         </CardDescription>
                       </div>
                     </div>
@@ -263,32 +265,37 @@ export default function ParentChildrenPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => handleViewChildDetails(child.id)}
+                      className="text-xs sm:text-sm w-full sm:w-auto sm:flex-shrink-0"
                     >
-                      <Eye className="w-4 h-4 mr-2" />
+                      <Eye className="w-3 h-3 sm:w-4 sm:h-4 mr-1 sm:mr-2" />
                       View Details
                     </Button>
                   </div>
                 </CardHeader>
-                <CardContent>
+                <CardContent className="p-4 sm:p-6 pt-0 sm:pt-0">
                   {child.class ? (
-                    <div className="space-y-3">
-                      <div className="flex items-center space-x-2">
-                        <BookOpen className="w-4 h-4 text-gray-500" />
-                        <span className="text-sm text-gray-600">Class:</span>
-                        <span className="text-sm font-medium">{child.class.name}</span>
+                    <div className="space-y-2 sm:space-y-3">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                        <div className="flex items-center space-x-2">
+                          <BookOpen className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                          <span className="text-xs sm:text-sm text-gray-600">Class:</span>
+                        </div>
+                        <span className="text-xs sm:text-sm font-medium ml-5 sm:ml-0">{child.class.name}</span>
                       </div>
                       
                       {child.class.teacher && (
-                        <div className="flex items-center space-x-2">
-                          <User className="w-4 h-4 text-gray-500" />
-                          <span className="text-sm text-gray-600">Teacher:</span>
-                          <span className="text-sm font-medium">{child.class.teacher.name}</span>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                          <div className="flex items-center space-x-2">
+                            <User className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
+                            <span className="text-xs sm:text-sm text-gray-600">Teacher:</span>
+                          </div>
+                          <span className="text-xs sm:text-sm font-medium ml-5 sm:ml-0">{child.class.teacher.name}</span>
                         </div>
                       )}
                     </div>
                   ) : (
-                    <div className="text-center py-4">
-                      <p className="text-sm text-gray-500">Not assigned to a class yet</p>
+                    <div className="text-center py-3 sm:py-4">
+                      <p className="text-xs sm:text-sm text-gray-500">Not assigned to a class yet</p>
                     </div>
                   )}
                 </CardContent>
