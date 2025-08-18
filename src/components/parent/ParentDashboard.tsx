@@ -18,7 +18,8 @@ import {
   Heart,
   Star,
   Smile,
-  RefreshCw
+  RefreshCw,
+  Phone
 } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import Layout from '../Layout'
@@ -214,8 +215,8 @@ export default function ParentDashboard() {
       // Get students linked to this parent
       let studentsData: Student[] = []
       
-      try {
-        const { data: studentParentsData, error: studentParentsError } = await supabase
+              try {
+          const { data: studentParentsData, error: studentParentsError } = await supabase
           .from('student_parent')
           .select(`
             students!student_parent_student_id_fkey (
@@ -245,22 +246,22 @@ export default function ParentDashboard() {
           // Transform the data and fetch all classes for each student
           const studentsWithClasses = await Promise.all(
             (studentParentsData || []).map(async (sp: any) => {
-              // Get all classes for this student using student_class table
-              const { data: studentClassesData, error: studentClassesError } = await supabase
-                .from('student_class')
-                .select(`
-                  classes!student_class_class_id_fkey (
+                          // Get all classes for this student using student_class table
+            const { data: studentClassesData, error: studentClassesError } = await supabase
+              .from('student_class')
+              .select(`
+                classes!student_class_class_id_fkey (
+                  id,
+                  name,
+                  teacher_id,
+                  teachers!classes_teacher_id_fkey (
                     id,
                     name,
-                    teacher_id,
-                    teachers!classes_teacher_id_fkey (
-                      id,
-                      name,
-                      email
-                    )
+                    email
                   )
-                `)
-                .eq('student_id', sp.students.id)
+                )
+              `)
+              .eq('student_id', sp.students.id)
 
               if (studentClassesError) {
                 console.error('Error fetching classes for student:', sp.students.id, studentClassesError)
@@ -806,7 +807,7 @@ export default function ParentDashboard() {
             </CardContent>
           </Card>
 
-          <Card className="sm:col-span-2 lg:col-span-1">
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-xs sm:text-sm font-medium">Updates</CardTitle>
               <MessageSquare className="h-4 w-4 text-muted-foreground" />
@@ -818,6 +819,8 @@ export default function ParentDashboard() {
               </p>
             </CardContent>
           </Card>
+
+
         </div>
 
         {/* Class Announcements Section */}
@@ -847,9 +850,11 @@ export default function ParentDashboard() {
                     <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 space-y-2 sm:space-y-0">
                       <div className="flex flex-wrap items-center gap-2">
                         {announcement.teacher && (
-                          <span className="text-xs sm:text-sm font-medium text-blue-600">
-                            {announcement.teacher.name}
-                          </span>
+                          <Link href={`/parent/teachers/${announcement.teacher.id}`}>
+                            <span className="text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
+                              {announcement.teacher.name}
+                            </span>
+                          </Link>
                         )}
                         {announcement.class && (
                           <span className="text-xs sm:text-sm text-purple-600 bg-purple-100 px-2 py-1 rounded">
@@ -1049,9 +1054,11 @@ export default function ParentDashboard() {
                               <div key={classItem.id} className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
                                 <Badge variant="secondary" className="text-xs">{classItem.name}</Badge>
                                 {classItem.teacher && (
-                                  <span className="text-xs text-gray-500">
-                                    ({classItem.teacher.name})
-                                  </span>
+                                  <Link href={`/parent/teachers/${classItem.teacher.id}`}>
+                                    <span className="text-xs text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
+                                      ({classItem.teacher.name})
+                                    </span>
+                                  </Link>
                                 )}
                                 {index < student.classes!.length - 1 && (
                                   <span className="text-xs text-gray-400 hidden sm:inline">•</span>
@@ -1075,7 +1082,11 @@ export default function ParentDashboard() {
                                 <User className="w-3 h-3 sm:w-4 sm:h-4 text-gray-500" />
                                 <span className="text-xs sm:text-sm text-gray-600">Teacher:</span>
                               </div>
-                              <span className="text-xs sm:text-sm font-medium">{student.class.teacher.name}</span>
+                              <Link href={`/parent/teachers/${student.class.teacher.id}`}>
+                                <span className="text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
+                                  {student.class.teacher.name}
+                                </span>
+                              </Link>
                               {student.class.teacher.email && (
                                 <div className="flex items-center space-x-1">
                                   <Mail className="w-2 h-2 sm:w-3 sm:h-3 text-gray-400" />
@@ -1122,9 +1133,11 @@ export default function ParentDashboard() {
                       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between mb-2 space-y-2 sm:space-y-0">
                         <div className="flex flex-wrap items-center gap-2">
                           {post.teacher && (
-                            <span className="text-xs sm:text-sm font-medium text-blue-600">
-                              {post.teacher.name}
-                            </span>
+                            <Link href={`/parent/teachers/${post.teacher.id}`}>
+                              <span className="text-xs sm:text-sm font-medium text-blue-600 hover:text-blue-800 hover:underline cursor-pointer">
+                                {post.teacher.name}
+                              </span>
+                            </Link>
                           )}
                           {post.student && (
                             <span className="text-xs sm:text-sm text-green-600 bg-green-100 px-2 py-1 rounded">

@@ -179,6 +179,14 @@ export default function Sidebar({ className, isCollapsed = false, onClose, isMob
       ]
     },
     {
+      section: 'teachers',
+      title: 'Teachers',
+      icon: Users,
+      items: [
+        { title: 'View Teacher Profiles', href: '/parent/teachers', icon: User },
+      ]
+    },
+    {
       section: 'communication',
       title: 'Communication',
       icon: MessageSquare,
