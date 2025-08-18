@@ -128,53 +128,55 @@ export default function TeacherProfileViewPage() {
         `)
         .eq('teacher_id', id)
 
+      let classesWithStudents: any[] = []
+      
       if (classesError) {
         console.error('Error fetching classes:', classesError)
         setClasses([])
-             } else {
-         // Fetch students for each class using the student_class relationship table
-         const classesWithStudents = await Promise.all(
-           (classesData || []).map(async (classItem) => {
-             try {
-               // First get student IDs from the student_class relationship table
-               const { data: studentClassData, error: studentClassError } = await supabase
-                 .from('student_class')
-                 .select('student_id')
-                 .eq('class_id', classItem.id)
+      } else {
+        // Fetch students for each class using the student_class relationship table
+        classesWithStudents = await Promise.all(
+          (classesData || []).map(async (classItem) => {
+            try {
+              // First get student IDs from the student_class relationship table
+              const { data: studentClassData, error: studentClassError } = await supabase
+                .from('student_class')
+                .select('student_id')
+                .eq('class_id', classItem.id)
 
-               if (studentClassError) {
-                 console.error(`Error fetching student-class relationships for class ${classItem.id}:`, studentClassError)
-                 return { ...classItem, students: [] }
-               }
+              if (studentClassError) {
+                console.error(`Error fetching student-class relationships for class ${classItem.id}:`, studentClassError)
+                return { ...classItem, students: [] }
+              }
 
-               if (!studentClassData || studentClassData.length === 0) {
-                 return { ...classItem, students: [] }
-               }
+              if (!studentClassData || studentClassData.length === 0) {
+                return { ...classItem, students: [] }
+              }
 
-               // Then fetch the actual student data using the student IDs
-               const studentIds = studentClassData.map(sc => sc.student_id)
-               const { data: studentsData, error: studentsError } = await supabase
-                 .from('students')
-                 .select('id, name')
-                 .in('id', studentIds)
+              // Then fetch the actual student data using the student IDs
+              const studentIds = studentClassData.map(sc => sc.student_id)
+              const { data: studentsData, error: studentsError } = await supabase
+                .from('students')
+                .select('id, name')
+                .in('id', studentIds)
 
-               if (studentsError) {
-                 console.error(`Error fetching students for class ${classItem.id}:`, studentsError)
-                 return { ...classItem, students: [] }
-               }
+              if (studentsError) {
+                console.error(`Error fetching students for class ${classItem.id}:`, studentsError)
+                return { ...classItem, students: [] }
+              }
 
-               return {
-                 ...classItem,
-                 students: studentsData || []
-               }
-             } catch (error) {
-               console.error(`Error processing class ${classItem.id}:`, error)
-               return { ...classItem, students: [] }
-             }
-           })
-         )
-         setClasses(classesWithStudents)
-       }
+              return {
+                ...classItem,
+                students: studentsData || []
+              }
+            } catch (error) {
+              console.error(`Error processing class ${classItem.id}:`, error)
+              return { ...classItem, students: [] }
+            }
+          })
+        )
+        setClasses(classesWithStudents)
+      }
 
       // Fetch stats
       await fetchTeacherStats()
