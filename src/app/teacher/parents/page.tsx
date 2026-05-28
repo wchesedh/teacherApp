@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { SearchableMultiSelect } from '@/components/ui/searchable-multi-select'
 import { 
   Users, 
   Mail, 
@@ -60,13 +61,65 @@ export default function TeacherParentsPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editingParent, setEditingParent] = useState<Parent | null>(null)
+  const [teacherStudents, setTeacherStudents] = useState<Student[]>([])
 
   useEffect(() => {
     if (user) {
       // Load parents immediately without showing loading state
       fetchParentsOptimized()
+      fetchTeacherStudents()
     }
   }, [user])
+
+  const fetchTeacherStudents = async () => {
+    if (!user) return
+
+    try {
+      const { data: classesData, error: classesError } = await supabase
+        .from('classes')
+        .select('id')
+        .eq('teacher_id', user.id)
+
+      if (classesError) {
+        console.error('Error fetching classes for linking:', classesError)
+        return
+      }
+
+      const classIds = (classesData || []).map((classItem) => classItem.id)
+      if (classIds.length === 0) {
+        setTeacherStudents([])
+        return
+      }
+
+      const { data: studentClassRows, error: studentClassError } = await supabase
+        .from('student_class')
+        .select(`
+          student_id,
+          students!student_class_student_id_fkey (
+            id,
+            name,
+            class_id,
+            created_at
+          )
+        `)
+        .in('class_id', classIds)
+
+      if (studentClassError) {
+        console.error('Error fetching students for linking:', studentClassError)
+        return
+      }
+
+      const mappedStudents = (studentClassRows || []).map((row: any) => row.students).filter(Boolean)
+      const uniqueStudents = mappedStudents.filter(
+        (student: Student, index: number, self: Student[]) =>
+          index === self.findIndex((s) => s.id === student.id)
+      )
+
+      setTeacherStudents(uniqueStudents)
+    } catch (error) {
+      console.error('Error loading students for linking:', error)
+    }
+  }
 
   const fetchParentsOptimized = async () => {
     try {
@@ -156,7 +209,7 @@ export default function TeacherParentsPage() {
     toast.success('Copied to clipboard')
   }
 
-  const handleEditParent = async (parentData: { id: string; name: string; email: string; phone?: string; password?: string }) => {
+  const handleEditParent = async (parentData: { id: string; name: string; email: string; phone?: string; password?: string; student_ids: string[] }) => {
     try {
       // Check if parent with this email already exists (excluding current parent)
       const { data: existingParent, error: checkError } = await supabase
@@ -200,20 +253,34 @@ export default function TeacherParentsPage() {
         return
       }
 
-      // Optimistic update
-      setParents(prev => prev.map(parent => 
-        parent.id === parentData.id 
-          ? { 
-              ...parent, 
-              name: parentData.name.trim(), 
-              email: parentData.email.trim(),
-              phone: parentData.phone?.trim() || null
-            }
-          : parent
-      ))
+      const { error: unlinkError } = await supabase
+        .from('student_parent')
+        .delete()
+        .eq('parent_id', parentData.id)
+
+      if (unlinkError) {
+        console.error('Error clearing existing parent links:', unlinkError)
+      }
+
+      if (parentData.student_ids.length > 0) {
+        const { error: linkError } = await supabase
+          .from('student_parent')
+          .insert(
+            parentData.student_ids.map((studentId) => ({
+              parent_id: parentData.id,
+              student_id: studentId
+            }))
+          )
+
+        if (linkError) {
+          console.error('Error updating parent-student links:', linkError)
+          toast.error('Parent updated, but some student links failed')
+        }
+      }
 
       setIsEditDialogOpen(false)
       setEditingParent(null)
+      await fetchParentsOptimized()
       toast.success('Parent updated successfully!')
     } catch (error) {
       console.error('Error updating parent:', error)
@@ -270,7 +337,7 @@ export default function TeacherParentsPage() {
     }
   }
 
-  const handleAddParent = async (parentData: { name: string; email: string; phone?: string; password: string }) => {
+  const handleAddParent = async (parentData: { name: string; email: string; phone?: string; password: string; student_ids: string[] }) => {
     try {
       // Check if parent with this email already exists
       const { data: existingParent, error: checkError } = await supabase
@@ -325,6 +392,22 @@ export default function TeacherParentsPage() {
       const result = await response.json()
 
       if (result.success && result.parent) {
+        if (parentData.student_ids.length > 0) {
+          const { error: linkError } = await supabase
+            .from('student_parent')
+            .insert(
+              parentData.student_ids.map((studentId) => ({
+                parent_id: result.parent.id,
+                student_id: studentId
+              }))
+            )
+
+          if (linkError) {
+            console.error('Error linking parent to students:', linkError)
+            toast.error('Parent created, but student linking failed')
+          }
+        }
+
         // Optimistic update
         const newParent: Parent = {
           id: result.parent.id,
@@ -337,6 +420,7 @@ export default function TeacherParentsPage() {
         }
         
         setParents(prev => [newParent, ...prev])
+        await fetchParentsOptimized()
         setIsAddDialogOpen(false)
         toast.success('Parent created successfully!')
       } else {
@@ -383,7 +467,7 @@ export default function TeacherParentsPage() {
                     Create a new parent account with login credentials
                   </DialogDescription>
                 </DialogHeader>
-                <AddParentForm onSubmit={handleAddParent} />
+                <AddParentForm onSubmit={handleAddParent} students={teacherStudents} />
               </DialogContent>
             </Dialog>
             
@@ -399,6 +483,7 @@ export default function TeacherParentsPage() {
                 {editingParent && (
                   <EditParentForm 
                     parent={editingParent}
+                    students={teacherStudents}
                     onSubmit={handleEditParent} 
                   />
                 )}
@@ -601,14 +686,17 @@ export default function TeacherParentsPage() {
 
 // Add Parent Form Component
 function AddParentForm({ 
-  onSubmit 
+  onSubmit,
+  students
 }: { 
-  onSubmit: (data: { name: string; email: string; phone?: string; password: string }) => void
+  onSubmit: (data: { name: string; email: string; phone?: string; password: string; student_ids: string[] }) => void
+  students: Student[]
 }) {
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -640,7 +728,8 @@ function AddParentForm({
       name: name.trim(), 
       email: email.trim(),
       phone: phone.trim() || undefined,
-      password: password.trim() 
+      password: password.trim(),
+      student_ids: selectedStudentIds
     })
     setLoading(false)
     
@@ -649,6 +738,7 @@ function AddParentForm({
     setEmail('')
     setPhone('')
     setPassword('')
+    setSelectedStudentIds([])
   }
 
   return (
@@ -700,6 +790,23 @@ function AddParentForm({
       </div>
       
       <div className="space-y-2">
+        <label className="text-sm font-medium">
+          Link Children (Optional)
+        </label>
+        <SearchableMultiSelect
+          options={students.map((student) => ({
+            value: student.id,
+            label: student.name
+          }))}
+          selectedValues={selectedStudentIds}
+          onChange={setSelectedStudentIds}
+          placeholder="Select child(ren)"
+          emptyText="No students available in your classes yet."
+          searchPlaceholder="Search students..."
+        />
+      </div>
+
+      <div className="space-y-2">
         <label htmlFor="parentPassword" className="text-sm font-medium">
           Password *
         </label>
@@ -726,16 +833,25 @@ function AddParentForm({
 // Edit Parent Form Component
 function EditParentForm({ 
   parent, 
+  students,
   onSubmit 
 }: { 
   parent: Parent
-  onSubmit: (data: { id: string; name: string; email: string; phone?: string; password?: string }) => void
+  students: Student[]
+  onSubmit: (data: { id: string; name: string; email: string; phone?: string; password?: string; student_ids: string[] }) => void
 }) {
   const [name, setName] = useState(parent.name)
   const [email, setEmail] = useState(parent.email || '')
   const [phone, setPhone] = useState(parent.phone || '')
   const [password, setPassword] = useState('')
+  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>(
+    (parent.students || []).map((student) => student.id)
+  )
   const [loading, setLoading] = useState(false)
+
+  useEffect(() => {
+    setSelectedStudentIds((parent.students || []).map((student) => student.id))
+  }, [parent])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -757,7 +873,8 @@ function EditParentForm({
       name: name.trim(), 
       email: email.trim(),
       phone: phone.trim() || undefined,
-      password: password.trim() || undefined
+      password: password.trim() || undefined,
+      student_ids: selectedStudentIds
     })
     setLoading(false)
     
@@ -766,6 +883,7 @@ function EditParentForm({
     setEmail(parent.email || '')
     setPhone(parent.phone || '')
     setPassword('')
+    setSelectedStudentIds((parent.students || []).map((student) => student.id))
   }
 
   return (
@@ -816,6 +934,23 @@ function EditParentForm({
         </p>
       </div>
       
+      <div className="space-y-2">
+        <label className="text-sm font-medium">
+          Linked Children
+        </label>
+        <SearchableMultiSelect
+          options={students.map((student) => ({
+            value: student.id,
+            label: student.name
+          }))}
+          selectedValues={selectedStudentIds}
+          onChange={setSelectedStudentIds}
+          placeholder="Select child(ren)"
+          emptyText="No students available in your classes yet."
+          searchPlaceholder="Search students..."
+        />
+      </div>
+
       <div className="space-y-2">
         <label htmlFor="editParentPassword" className="text-sm font-medium">
           New Password (optional)

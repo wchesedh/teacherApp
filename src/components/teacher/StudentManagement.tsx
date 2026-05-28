@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { SearchableMultiSelect } from '@/components/ui/searchable-multi-select'
 import { Plus, Search, MoreHorizontal, Edit, Trash2, Eye } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
@@ -29,11 +30,18 @@ interface Class {
   name: string
 }
 
+interface Parent {
+  id: string
+  name: string
+  email: string | null
+}
+
 export default function StudentManagement() {
   const { user } = useAuth()
   const router = useRouter()
   const [students, setStudents] = useState<Student[]>([])
   const [classes, setClasses] = useState<Class[]>([])
+  const [parents, setParents] = useState<Parent[]>([])
   const [loading, setLoading] = useState(false)
   const [searchTerm, setSearchTerm] = useState('')
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
@@ -57,6 +65,7 @@ export default function StudentManagement() {
       // Start with empty arrays to show page immediately
       setStudents([])
       setClasses([])
+      setParents([])
       
       // Fetch teacher's classes first (fastest query)
       const { data: classesData, error: classesError } = await supabase
@@ -72,6 +81,17 @@ export default function StudentManagement() {
       
       console.log('Classes fetched:', classesData)
       setClasses(classesData || [])
+
+      const { data: parentsData, error: parentsError } = await supabase
+        .from('parents')
+        .select('id, name, email')
+        .order('name', { ascending: true })
+
+      if (parentsError) {
+        console.error('Error fetching parents:', parentsError)
+      } else {
+        setParents(parentsData || [])
+      }
       
       const classIds = classesData?.map(c => c.id) || []
       
@@ -204,7 +224,7 @@ export default function StudentManagement() {
     return 'Not assigned'
   }
 
-  const handleAddStudent = async (studentData: { name: string; id_number?: string; class_id: string }) => {
+  const handleAddStudent = async (studentData: { name: string; id_number?: string; class_id: string; parent_ids: string[] }) => {
     try {
       // Verify the class belongs to this teacher
       const { data: classData, error: classError } = await supabase
@@ -246,6 +266,22 @@ export default function StudentManagement() {
         if (studentClassError) {
           console.error('Error adding student to class:', studentClassError)
           // Don't fail the whole operation, just log the error
+        }
+
+        if (studentData.parent_ids.length > 0) {
+          const { error: studentParentError } = await supabase
+            .from('student_parent')
+            .insert(
+              studentData.parent_ids.map((parentId) => ({
+                student_id: studentResult[0].id,
+                parent_id: parentId
+              }))
+            )
+
+          if (studentParentError) {
+            console.error('Error linking student to parents:', studentParentError)
+            toast.error('Student created, but parent linking failed')
+          }
         }
 
         // Optimistic update
@@ -353,6 +389,7 @@ export default function StudentManagement() {
               <AddStudentForm 
                 onSubmit={handleAddStudent} 
                 classes={classes}
+                parents={parents}
               />
             </DialogContent>
           </Dialog>
@@ -458,14 +495,17 @@ export default function StudentManagement() {
 // Add Student Form Component
 function AddStudentForm({ 
   onSubmit, 
-  classes 
+  classes,
+  parents
 }: { 
-  onSubmit: (data: { name: string; id_number?: string; class_id: string }) => void
+  onSubmit: (data: { name: string; id_number?: string; class_id: string; parent_ids: string[] }) => void
   classes: Class[]
+  parents: Parent[]
 }) {
   const [name, setName] = useState('')
   const [idNumber, setIdNumber] = useState('')
   const [classId, setClassId] = useState('')
+  const [selectedParentIds, setSelectedParentIds] = useState<string[]>([])
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -486,12 +526,14 @@ function AddStudentForm({
     await onSubmit({ 
       name: name.trim(), 
       id_number: idNumber.trim() || undefined,
-      class_id: classId
+      class_id: classId,
+      parent_ids: selectedParentIds
     })
 
     setName('')
     setIdNumber('')
     setClassId('')
+    setSelectedParentIds([])
     setLoading(false)
   }
 
@@ -538,6 +580,23 @@ function AddStudentForm({
             ))}
           </SelectContent>
         </Select>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">
+          Link Parents (Optional)
+        </label>
+        <SearchableMultiSelect
+          options={parents.map((parent) => ({
+            value: parent.id,
+            label: `${parent.name}${parent.email ? ` (${parent.email})` : ''}`
+          }))}
+          selectedValues={selectedParentIds}
+          onChange={setSelectedParentIds}
+          placeholder="Select parent(s)"
+          emptyText="No parents available yet."
+          searchPlaceholder="Search parents..."
+        />
       </div>
       
       <Button type="submit" className="w-full" disabled={loading}>

@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 import { Badge } from '@/components/ui/badge'
+import { SearchableMultiSelect } from '@/components/ui/searchable-multi-select'
 import { 
   GraduationCap, 
   User, 
@@ -135,6 +136,8 @@ export default function StudentProfilePage({
     teachers: 0,
     classmates: 0
   })
+  const [availableParents, setAvailableParents] = useState<Parent[]>([])
+  const [selectedParentIds, setSelectedParentIds] = useState<string[]>([])
   const [editForm, setEditForm] = useState({
     first_name: '',
     middle_name: '',
@@ -720,11 +723,24 @@ export default function StudentProfilePage({
           if (parentsError) {
             console.error('Error fetching parents:', parentsError)
           } else {
+            setSelectedParentIds(parentIds)
             setStudent({ ...studentData, parents: parentsData || [] })
           }
         } else {
+          setSelectedParentIds([])
           setStudent({ ...studentData, parents: [] })
         }
+      }
+
+      const { data: allParentsData, error: allParentsError } = await supabase
+        .from('parents')
+        .select('id, name, email, created_at')
+        .order('name', { ascending: true })
+
+      if (allParentsError) {
+        console.error('Error fetching available parents:', allParentsError)
+      } else {
+        setAvailableParents(allParentsData || [])
       }
 
       // Parse the student name to get first and last name
@@ -863,6 +879,38 @@ export default function StudentProfilePage({
         return
       }
 
+      const { error: unlinkError } = await supabase
+        .from('student_parent')
+        .delete()
+        .eq('student_id', student.id)
+
+      if (unlinkError) {
+        console.error('Error clearing student-parent links:', unlinkError)
+        toast.error('Profile updated, but failed to refresh parent links')
+        return
+      }
+
+      if (selectedParentIds.length > 0) {
+        const { error: linkError } = await supabase
+          .from('student_parent')
+          .insert(
+            selectedParentIds.map((parentId) => ({
+              student_id: student.id,
+              parent_id: parentId
+            }))
+          )
+
+        if (linkError) {
+          console.error('Error linking student to parents:', linkError)
+          toast.error('Profile updated, but failed to update parent links')
+          return
+        }
+      }
+
+      const selectedParents = availableParents.filter((parent) =>
+        selectedParentIds.includes(parent.id)
+      )
+
       // Update local state
       setStudent(prev => prev ? {
         ...prev,
@@ -870,7 +918,8 @@ export default function StudentProfilePage({
         id_number: editForm.id_number || undefined,
         bio: editForm.bio || undefined,
         grade: editForm.grade || undefined,
-        age: editForm.age ? parseInt(editForm.age) : undefined
+        age: editForm.age ? parseInt(editForm.age) : undefined,
+        parents: selectedParents
       } : null)
 
       setEditMode(false)
@@ -1315,6 +1364,22 @@ export default function StudentProfilePage({
                         rows={3}
                         className="mt-1 w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                       />
+                    </div>
+                    <div>
+                      <Label className="text-sm font-medium">Linked Parents</Label>
+                      <div className="mt-1">
+                        <SearchableMultiSelect
+                          options={availableParents.map((parent) => ({
+                            value: parent.id,
+                            label: `${parent.name}${parent.email ? ` (${parent.email})` : ''}`
+                          }))}
+                          selectedValues={selectedParentIds}
+                          onChange={setSelectedParentIds}
+                          placeholder="Select parent(s)"
+                          emptyText="No parents available yet."
+                          searchPlaceholder="Search parents..."
+                        />
+                      </div>
                     </div>
                     <div className="flex space-x-2 pt-2">
                       <Button size="sm" onClick={handleSaveProfile}>
